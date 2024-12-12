@@ -1,6 +1,8 @@
 use wgpu::{
-    core::instance, Color, CommandEncoderDescriptor, Features, InstanceDescriptor, Limits,
-    MemoryHints, RenderPassColorAttachment, RenderPassDescriptor, SurfaceError, TextureView,
+    include_wgsl, BlendState, Color, ColorTargetState, ColorWrites, CommandEncoderDescriptor,
+    Features, InstanceDescriptor, Limits, MemoryHints, MultisampleState,
+    PipelineCompilationOptions, PrimitiveState, RenderPassColorAttachment, RenderPassDescriptor,
+    RenderPipeline, RenderPipelineDescriptor, ShaderModuleDescriptor, SurfaceError,
     TextureViewDescriptor,
 };
 use winit::{
@@ -21,6 +23,8 @@ struct State<'a> {
     // it gets dropped after it as the surface contains
     // unsafe references to the window's resources.
     window: &'a Window,
+
+    pipeline: RenderPipeline,
 }
 
 impl<'a> State<'a> {
@@ -79,7 +83,56 @@ impl<'a> State<'a> {
             desired_maximum_frame_latency: 2,
         };
 
+        let shader = device.create_shader_module(include_wgsl!("shader.wgsl"));
+
+        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("Pipeline Layout"),
+            bind_group_layouts: &[],
+            push_constant_ranges: &[],
+        });
+
+        let pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
+            label: Some("Render Pipeline"),
+            layout: Some(&pipeline_layout),
+
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: Some("vs_main"), // None selects the only entry point for @vertex. Expects only one!!
+                buffers: &[],
+                compilation_options: PipelineCompilationOptions::default(),
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: Some("fs_main"), // None selects the only entry point for @fragment. Expects only one!!
+                compilation_options: PipelineCompilationOptions::default(),
+                targets: &[Some(ColorTargetState {
+                    format: config.format,
+                    blend: Some(BlendState::REPLACE),
+                    write_mask: ColorWrites::ALL,
+                })],
+            }),
+
+            primitive: PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                strip_index_format: None,
+                front_face: wgpu::FrontFace::Ccw,
+                cull_mode: Some(wgpu::Face::Back),
+                unclipped_depth: false,
+                polygon_mode: wgpu::PolygonMode::Fill,
+                conservative: false,
+            },
+            depth_stencil: None,
+            multisample: MultisampleState {
+                count: 1,
+                mask: !0,
+                alpha_to_coverage_enabled: false,
+            },
+            multiview: None,
+            cache: None,
+        });
+
         State {
+            pipeline,
             surface,
             device,
             queue,
@@ -121,25 +174,32 @@ impl<'a> State<'a> {
             });
 
         {
-            let _render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
+            let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
                 label: Some("Render Pass 1"),
-                color_attachments: &[Some(RenderPassColorAttachment {
-                    view: &view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(Color {
-                            r: 0.1,
-                            g: 0.2,
-                            b: 0.3,
-                            a: 1.0,
-                        }),
-                        store: wgpu::StoreOp::Store,
-                    },
-                })],
+                color_attachments: &[
+                    // This is what @location(0) in the fragment shader targets
+                    Some(RenderPassColorAttachment {
+                        view: &view,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(Color {
+                                r: 0.1,
+                                g: 0.2,
+                                b: 0.3,
+                                a: 1.0,
+                            }),
+                            store: wgpu::StoreOp::Store,
+                        },
+                    }),
+                ],
                 depth_stencil_attachment: None,
                 occlusion_query_set: None,
                 timestamp_writes: None,
             });
+
+            // computerrender_pass.set_vertex_buffer(slot, buffer_slice);
+            render_pass.set_pipeline(&self.pipeline);
+            render_pass.draw(0..3, 0..1);
         }
 
         self.queue.submit(std::iter::once(encoder.finish()));
@@ -173,7 +233,7 @@ pub fn run() -> Result<(), EventLoopError> {
             } => control_flow.exit(),
             WindowEvent::Resized(new_size) => {
                 state.resize(*new_size);
-            },
+            }
             WindowEvent::RedrawRequested => {
                 state.window.request_redraw();
 
