@@ -1,0 +1,21 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Build Shaders",
+            "type": "shell",
+            "command": "${workspaceFolder}/bin/dxc/dxc.exe",
+            "args": [
+                "-T", "vs_6_0", // or the appropriate shader model
+                "-E", "vs_main", // vertex shader entry point
+                "-Fo", "${workspaceFolder}/data/spirv/vertex_shader.spv",
+                "${workspaceFolder}/src/shaders/shader.hlsl"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": false
+            },
+            "problemMatcher": []
+        }
+    ]
+}

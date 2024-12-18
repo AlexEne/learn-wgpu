@@ -5,41 +5,13 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "type": "lldb",
+            "type": "cppvsdbg",
             "request": "launch",
+            "program": "${workspaceRoot}/target/debug/learn_wgpu.exe",
             "name": "Debug executable 'learn_wgpu'",
-            "cargo": {
-                "args": [
-                    "build",
-                    "--bin=learn_wgpu",
-                    "--package=learn_wgpu"
-                ],
-                "filter": {
-                    "name": "learn_wgpu",
-                    "kind": "bin"
-                }
-            },
             "args": [],
-            "cwd": "${workspaceFolder}"
-        },
-        {
-            "type": "lldb",
-            "request": "launch",
-            "name": "Debug unit tests in executable 'learn_wgpu'",
-            "cargo": {
-                "args": [
-                    "test",
-                    "--no-run",
-                    "--bin=learn_wgpu",
-                    "--package=learn_wgpu"
-                ],
-                "filter": {
-                    "name": "learn_wgpu",
-                    "kind": "bin"
-                }
-            },
-            "args": [],
-            "cwd": "${workspaceFolder}"
+            "cwd": "${workspaceFolder}",
+            "preLaunchTask": "rust: cargo build"
         }
     ]
 }

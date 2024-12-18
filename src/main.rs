@@ -1,14 +1,12 @@
-use std::f32::consts::E;
 mod texture;
 
 use wgpu::{
-    include_wgsl,
+    include_spirv_raw,
     util::{BufferInitDescriptor, DeviceExt},
-    BlendState, Color, ColorTargetState, ColorWrites, CommandEncoderDescriptor, Extent3d, Features,
-    ImageCopyTexture, ImageDataLayout, InstanceDescriptor, Limits, MemoryHints, MultisampleState,
-    Origin3d, PipelineCompilationOptions, PrimitiveState, RenderPassColorAttachment,
-    RenderPassDescriptor, RenderPipeline, RenderPipelineDescriptor, SamplerDescriptor,
-    ShaderModuleDescriptor, SurfaceError, TextureViewDescriptor, VertexAttribute,
+    BlendState, Color, ColorTargetState, ColorWrites, CommandEncoderDescriptor, Features,
+    InstanceDescriptor, Limits, MemoryHints, MultisampleState, PipelineCompilationOptions,
+    PrimitiveState, RenderPassColorAttachment, RenderPassDescriptor, RenderPipeline,
+    RenderPipelineDescriptor, SurfaceError, TextureViewDescriptor, VertexAttribute,
     VertexBufferLayout,
 };
 use winit::{
@@ -93,6 +91,27 @@ impl<'a> State<'a> {
     async fn new(window: &'a Window) -> State<'a> {
         let size = window.inner_size();
 
+        // let compiler = shaderc::Compiler::new().unwrap();
+        // let vertex_shader = compiler
+        //     .compile_into_spirv(
+        //         include_str!("shaders-glsl/vertex_shader.vert"),
+        //         shaderc::ShaderKind::Vertex,
+        //         "shader.vert",
+        //         "main",
+        //         None,
+        //     )
+        //     .unwrap();
+
+        // let fragment_shader = compiler
+        //     .compile_into_spirv(
+        //         include_str!("shaders-glsl/fragment.frag"),
+        //         shaderc::ShaderKind::Fragment,
+        //         "fragment.frag",
+        //         "main",
+        //         None,
+        //     )
+        //     .unwrap();
+
         let instance = wgpu::Instance::new(InstanceDescriptor {
             backends: wgpu::Backends::PRIMARY,
             ..Default::default()
@@ -113,7 +132,7 @@ impl<'a> State<'a> {
             .request_device(
                 &wgpu::DeviceDescriptor {
                     label: Some("Device"),
-                    required_features: Features::empty(),
+                    required_features: Features::SPIRV_SHADER_PASSTHROUGH,
                     required_limits: Limits::default(),
                     memory_hints: MemoryHints::default(),
                 },
@@ -144,7 +163,32 @@ impl<'a> State<'a> {
             desired_maximum_frame_latency: 2,
         };
 
-        let shader = device.create_shader_module(include_wgsl!("shader.wgsl"));
+        // let shader = device.create_shader_module(include_wgsl!("shader.wgsl"));
+        let vertex_shader = unsafe {
+            device.create_shader_module_spirv(&include_spirv_raw!("../data/spirv/glsl/vertex.spv"))
+        };
+        let fragment_shader = unsafe {
+            device
+                .create_shader_module_spirv(&include_spirv_raw!("../data/spirv/glsl/fragment.spv"))
+        };
+
+        // let vertex_shader = device.create_shader_module(ShaderModuleDescriptor {
+        //     label: Some("Vtx Shader"),
+        //     source: ShaderSource::Glsl {
+        //         shader: Cow::from(include_str!("shaders-glsl/vertex_shader.vert")),
+        //         stage: wgpu::naga::ShaderStage::Vertex,
+        //         defines: Default::default(),
+        //     },
+        // });
+
+        // let fragment_shader = device.create_shader_module(ShaderModuleDescriptor {
+        //     label: Some("Frag Shader"),
+        //     source: ShaderSource::Glsl {
+        //         shader: Cow::from(include_str!("shaders-glsl/fragment.frag")),
+        //         stage: wgpu::naga::ShaderStage::Fragment,
+        //         defines: Default::default(),
+        //     },
+        // });
 
         let diffuse_bytes = include_bytes!("happy-tree.png");
         let diffuse_texture =
@@ -178,19 +222,20 @@ impl<'a> State<'a> {
             push_constant_ranges: &[],
         });
 
+        println!("{:?}", config.format);
         let pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
             label: Some("Render Pipeline"),
             layout: Some(&pipeline_layout),
 
             vertex: wgpu::VertexState {
-                module: &shader,
-                entry_point: Some("vs_main"), // None selects the only entry point for @vertex. Expects only one!!
+                module: &vertex_shader,
+                entry_point: Some("main"), // None selects the only entry point for @vertex. Expects only one!!
                 buffers: &[Vertex::desc()],
                 compilation_options: PipelineCompilationOptions::default(),
             },
             fragment: Some(wgpu::FragmentState {
-                module: &shader,
-                entry_point: Some("fs_main"), // None selects the only entry point for @fragment. Expects only one!!
+                module: &fragment_shader,
+                entry_point: Some("main"), // None selects the only entry point for @fragment. Expects only one!!
                 compilation_options: PipelineCompilationOptions::default(),
                 targets: &[Some(ColorTargetState {
                     format: config.format,
