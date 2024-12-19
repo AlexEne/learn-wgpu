@@ -1,13 +1,16 @@
 mod texture;
 
+use std::{borrow::Cow, env};
+
+use shaderc::{CompileOptions, IncludeType, ResolvedInclude};
 use wgpu::{
     include_spirv_raw,
     util::{BufferInitDescriptor, DeviceExt},
     BlendState, Color, ColorTargetState, ColorWrites, CommandEncoderDescriptor, Features,
     InstanceDescriptor, Limits, MemoryHints, MultisampleState, PipelineCompilationOptions,
     PrimitiveState, RenderPassColorAttachment, RenderPassDescriptor, RenderPipeline,
-    RenderPipelineDescriptor, SurfaceError, TextureViewDescriptor, VertexAttribute,
-    VertexBufferLayout,
+    RenderPipelineDescriptor, ShaderModuleDescriptorSpirV, ShaderSource, SurfaceError,
+    TextureViewDescriptor, VertexAttribute, VertexBufferLayout,
 };
 use winit::{
     error::EventLoopError,
@@ -86,31 +89,74 @@ struct State<'a> {
     diffuse_texture: texture::Texture,
 }
 
+struct MyIncludeResolver;
+
+impl MyIncludeResolver {
+    fn resolve_include(
+        requested_source: &str,
+        include_type: IncludeType,
+        requesting_source: &str,
+        _include_depth: usize,
+    ) -> Result<ResolvedInclude, String> {
+        // Example: Simple resolver that loads files from the local directory
+        // Adjust this logic to match your project's structure
+        let include_path = match include_type {
+            IncludeType::Standard => requested_source.to_string(),
+            IncludeType::Relative => {
+                // Assuming `requesting_source` is a path, resolve relative paths
+                let base_path = std::path::Path::new(requesting_source)
+                    .parent()
+                    .unwrap_or_else(|| std::path::Path::new("."));
+                base_path
+                    .join(requested_source)
+                    .to_str()
+                    .unwrap()
+                    .to_string()
+            }
+        };
+
+        println!("{:?}", env::current_dir());
+
+        // Read the file's contents
+        let include_path = "./src/shaders-glsl/".to_owned() + &include_path;
+        let source_code = std::fs::read_to_string(&include_path)
+            .map_err(|e| format!("Failed to load include file {}: {}", include_path, e))?;
+
+        Ok(ResolvedInclude {
+            resolved_name: include_path,
+            content: source_code,
+        })
+    }
+}
+
 impl<'a> State<'a> {
     // Creating some of the wgpu types requires async code
     async fn new(window: &'a Window) -> State<'a> {
         let size = window.inner_size();
 
-        // let compiler = shaderc::Compiler::new().unwrap();
-        // let vertex_shader = compiler
-        //     .compile_into_spirv(
-        //         include_str!("shaders-glsl/vertex_shader.vert"),
-        //         shaderc::ShaderKind::Vertex,
-        //         "shader.vert",
-        //         "main",
-        //         None,
-        //     )
-        //     .unwrap();
+        let compiler = shaderc::Compiler::new().unwrap();
+        let mut compile_options = CompileOptions::new().unwrap();
+        compile_options.set_include_callback(MyIncludeResolver::resolve_include);
 
-        // let fragment_shader = compiler
-        //     .compile_into_spirv(
-        //         include_str!("shaders-glsl/fragment.frag"),
-        //         shaderc::ShaderKind::Fragment,
-        //         "fragment.frag",
-        //         "main",
-        //         None,
-        //     )
-        //     .unwrap();
+        let vertex_shader = compiler
+            .compile_into_spirv(
+                include_str!("shaders-glsl/vertex_shader.vert"),
+                shaderc::ShaderKind::Vertex,
+                "shader.vert",
+                "main",
+                Some(&compile_options),
+            )
+            .unwrap();
+
+        let fragment_shader = compiler
+            .compile_into_spirv(
+                include_str!("shaders-glsl/fragment.frag"),
+                shaderc::ShaderKind::Fragment,
+                "fragment.frag",
+                "main",
+                Some(&compile_options),
+            )
+            .unwrap();
 
         let instance = wgpu::Instance::new(InstanceDescriptor {
             backends: wgpu::Backends::PRIMARY,
@@ -163,14 +209,16 @@ impl<'a> State<'a> {
             desired_maximum_frame_latency: 2,
         };
 
+        surface.configure(&device, &config);
+
         // let shader = device.create_shader_module(include_wgsl!("shader.wgsl"));
-        let vertex_shader = unsafe {
-            device.create_shader_module_spirv(&include_spirv_raw!("../data/spirv/glsl/vertex.spv"))
-        };
-        let fragment_shader = unsafe {
-            device
-                .create_shader_module_spirv(&include_spirv_raw!("../data/spirv/glsl/fragment.spv"))
-        };
+        // let vertex_shader = unsafe {
+        //     device.create_shader_module_spirv(&include_spirv_raw!("../data/spirv/glsl/vertex.spv"))
+        // };
+        // let fragment_shader = unsafe {
+        //     device
+        //         .create_shader_module_spirv(&include_spirv_raw!("../data/spirv/glsl/fragment.spv"))
+        // };
 
         // let vertex_shader = device.create_shader_module(ShaderModuleDescriptor {
         //     label: Some("Vtx Shader"),
@@ -189,6 +237,19 @@ impl<'a> State<'a> {
         //         defines: Default::default(),
         //     },
         // });
+
+        let vertex_shader = unsafe {
+            device.create_shader_module_spirv(&ShaderModuleDescriptorSpirV {
+                label: Some("Vertex Shader"),
+                source: Cow::from(vertex_shader.as_binary()),
+            })
+        };
+        let fragment_shader = unsafe {
+            device.create_shader_module_spirv(&ShaderModuleDescriptorSpirV {
+                label: Some("Fragment Shader"),
+                source: Cow::from(fragment_shader.as_binary()),
+            })
+        };
 
         let diffuse_bytes = include_bytes!("happy-tree.png");
         let diffuse_texture =
