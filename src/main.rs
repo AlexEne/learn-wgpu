@@ -174,11 +174,16 @@ impl<'a> State<'a> {
             .await
             .unwrap();
 
+        #[cfg(windows) ]
+        let required_features = Features::SPIRV_SHADER_PASSTHROUGH;
+        #[cfg(not(windows))]
+        let required_features = Features::empty();
+        
         let (device, queue) = adapter
             .request_device(
                 &wgpu::DeviceDescriptor {
                     label: Some("Device"),
-                    required_features: Features::SPIRV_SHADER_PASSTHROUGH,
+                    required_features,
                     required_limits: Limits::default(),
                     memory_hints: MemoryHints::default(),
                 },
@@ -238,17 +243,37 @@ impl<'a> State<'a> {
         //     },
         // });
 
-        let vertex_shader = unsafe {
-            device.create_shader_module_spirv(&ShaderModuleDescriptorSpirV {
-                label: Some("Vertex Shader"),
-                source: Cow::from(vertex_shader.as_binary()),
-            })
+        #[cfg(not(target_os="macos"))]
+        let (vertex_shader, fragment_shader) = {
+            let vertex_shader = unsafe {
+                device.create_shader_module_spirv(&ShaderModuleDescriptorSpirV {
+                    label: Some("Vertex Shader"),
+                    source: Cow::from(vertex_shader.as_binary()),
+                })
+            };
+            let fragment_shader = unsafe {
+                device.create_shader_module_spirv(&ShaderModuleDescriptorSpirV {
+                    label: Some("Fragment Shader"),
+                    source: Cow::from(fragment_shader.as_binary()),
+                })
+            };
+            
+            (vertex_shader, fragment_shader)
         };
-        let fragment_shader = unsafe {
-            device.create_shader_module_spirv(&ShaderModuleDescriptorSpirV {
-                label: Some("Fragment Shader"),
-                source: Cow::from(fragment_shader.as_binary()),
-            })
+        
+        #[cfg(target_os="macos")]
+        let (vertex_shader, fragment_shader) = {
+            let vertex_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+                label: Some("Vertex Shader"),
+                source: wgpu::ShaderSource::SpirV(Cow::Borrowed(vertex_shader.as_binary())),
+            });
+            
+            let fragment_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+                label: Some("Vertex Shader"),
+                source: wgpu::ShaderSource::SpirV(Cow::Borrowed(fragment_shader.as_binary())),
+            });
+            
+            (vertex_shader, fragment_shader)
         };
 
         let diffuse_bytes = include_bytes!("happy-tree.png");
