@@ -16,3 +16,4 @@ image = { version = "0.24", features = [
 ], default-features = false }
 anyhow = "1.0.94"
 shaderc = "0.8.3"
+glam = "0.29.2"
