@@ -8,8 +8,8 @@ use wgpu::{
     BlendState, Color, ColorTargetState, ColorWrites, CommandEncoderDescriptor, Features,
     InstanceDescriptor, Limits, MemoryHints, MultisampleState, PipelineCompilationOptions,
     PrimitiveState, RenderPassColorAttachment, RenderPassDescriptor, RenderPipeline,
-    RenderPipelineDescriptor, ShaderModuleDescriptorSpirV, ShaderSource, SurfaceError,
-    TextureViewDescriptor, VertexAttribute, VertexBufferLayout,
+    RenderPipelineDescriptor, ShaderModuleDescriptorSpirV, ShaderSource, SurfaceConfiguration,
+    SurfaceError, TextureViewDescriptor, VertexAttribute, VertexBufferLayout,
 };
 use winit::{
     error::EventLoopError,
@@ -88,7 +88,91 @@ struct State<'a> {
     diffuse_texture: texture::Texture,
 }
 
-impl<'a> State<'a> {    
+impl<'a> State<'a> {
+    fn configure_surface(
+        surface: &wgpu::Surface,
+        adapter: &wgpu::Adapter,
+        device: &wgpu::Device,
+        size: winit::dpi::PhysicalSize<u32>,
+    ) -> wgpu::SurfaceConfiguration {
+        let surface_caps = surface.get_capabilities(adapter);
+        let surface_format = surface_caps
+            .formats
+            .iter()
+            .find(|f| f.is_srgb())
+            .copied()
+            .unwrap_or(surface_caps.formats[0]);
+
+        let config = wgpu::SurfaceConfiguration {
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+            format: surface_format,
+            width: size.width,
+            height: size.height,
+            present_mode: wgpu::PresentMode::AutoVsync,
+            alpha_mode: surface_caps.alpha_modes[0],
+            view_formats: vec![],
+            desired_maximum_frame_latency: 2,
+        };
+
+        surface.configure(device, &config);
+        config
+    }
+
+    fn create_pipeline(
+        device: &wgpu::Device,
+        config: &SurfaceConfiguration,
+        vertex_shader: wgpu::ShaderModule,
+        fragment_shader: wgpu::ShaderModule,
+        bind_group_layout: &wgpu::BindGroupLayout,
+    ) -> RenderPipeline {
+        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("Pipeline Layout"),
+            bind_group_layouts: &[bind_group_layout],
+            push_constant_ranges: &[],
+        });
+
+        let pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
+            label: Some("Render Pipeline"),
+            layout: Some(&pipeline_layout),
+
+            vertex: wgpu::VertexState {
+                module: &vertex_shader,
+                entry_point: Some("main"), // None selects the only entry point for @vertex. Expects only one!!
+                buffers: &[Vertex::desc()],
+                compilation_options: PipelineCompilationOptions::default(),
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &fragment_shader,
+                entry_point: Some("main"), // None selects the only entry point for @fragment. Expects only one!!
+                compilation_options: PipelineCompilationOptions::default(),
+                targets: &[Some(ColorTargetState {
+                    format: config.format,
+                    blend: Some(BlendState::REPLACE),
+                    write_mask: ColorWrites::ALL,
+                })],
+            }),
+
+            primitive: PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                strip_index_format: None,
+                front_face: wgpu::FrontFace::Ccw,
+                cull_mode: Some(wgpu::Face::Back),
+                unclipped_depth: false,
+                polygon_mode: wgpu::PolygonMode::Fill,
+                conservative: false,
+            },
+            depth_stencil: None,
+            multisample: MultisampleState {
+                count: 1,
+                mask: !0,
+                alpha_to_coverage_enabled: false,
+            },
+            multiview: None,
+            cache: None,
+        });
+        pipeline
+    }
+
     // Creating some of the wgpu types requires async code
     async fn new(window: &'a Window) -> State<'a> {
         let size = window.inner_size();
@@ -127,29 +211,7 @@ impl<'a> State<'a> {
             .await
             .unwrap();
 
-        let surface_caps = surface.get_capabilities(&adapter);
-        // Shader code in this tutorial assumes an sRGB surface texture. Using a different
-        // one will result in all the colors coming out darker. If you want to support non
-        // sRGB surfaces, you'll need to account for that when drawing to the frame.
-        let surface_format = surface_caps
-            .formats
-            .iter()
-            .find(|f| f.is_srgb())
-            .copied()
-            .unwrap_or(surface_caps.formats[0]);
-
-        let config = wgpu::SurfaceConfiguration {
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-            format: surface_format,
-            width: size.width,
-            height: size.height,
-            present_mode: wgpu::PresentMode::AutoVsync,
-            alpha_mode: surface_caps.alpha_modes[0],
-            view_formats: vec![],
-            desired_maximum_frame_latency: 2,
-        };
-
-        surface.configure(&device, &config);
+        let config = State::configure_surface(&surface, &adapter, &device, size);
 
         let (vertex_shader, fragment_shader) = shader_compiler::compile_shaders();
 
@@ -212,52 +274,13 @@ impl<'a> State<'a> {
             ],
         });
 
-        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("Pipeline Layout"),
-            bind_group_layouts: &[&bind_group_layout],
-            push_constant_ranges: &[],
-        });
-
-        println!("{:?}", config.format);
-        let pipeline = device.create_render_pipeline(&RenderPipelineDescriptor {
-            label: Some("Render Pipeline"),
-            layout: Some(&pipeline_layout),
-
-            vertex: wgpu::VertexState {
-                module: &vertex_shader,
-                entry_point: Some("main"), // None selects the only entry point for @vertex. Expects only one!!
-                buffers: &[Vertex::desc()],
-                compilation_options: PipelineCompilationOptions::default(),
-            },
-            fragment: Some(wgpu::FragmentState {
-                module: &fragment_shader,
-                entry_point: Some("main"), // None selects the only entry point for @fragment. Expects only one!!
-                compilation_options: PipelineCompilationOptions::default(),
-                targets: &[Some(ColorTargetState {
-                    format: config.format,
-                    blend: Some(BlendState::REPLACE),
-                    write_mask: ColorWrites::ALL,
-                })],
-            }),
-
-            primitive: PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleList,
-                strip_index_format: None,
-                front_face: wgpu::FrontFace::Ccw,
-                cull_mode: Some(wgpu::Face::Back),
-                unclipped_depth: false,
-                polygon_mode: wgpu::PolygonMode::Fill,
-                conservative: false,
-            },
-            depth_stencil: None,
-            multisample: MultisampleState {
-                count: 1,
-                mask: !0,
-                alpha_to_coverage_enabled: false,
-            },
-            multiview: None,
-            cache: None,
-        });
+        let pipeline = State::create_pipeline(
+            &device,
+            &config,
+            vertex_shader,
+            fragment_shader,
+            &bind_group_layout,
+        );
 
         let vertex_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: Some("Vertex Buffer"),
