@@ -4,6 +4,7 @@ mod texture;
 use std::borrow::Cow;
 
 use camera::{Camera, CameraUniform};
+use glam::{Quat, Vec3};
 use wgpu::{
     include_spirv_raw,
     util::{BufferInitDescriptor, DeviceExt},
@@ -95,11 +96,14 @@ struct State<'a> {
     camera_buffer: wgpu::Buffer,
     camera_bind_group: wgpu::BindGroup,
     camera_controller: CameraController,
+
+    instances: Vec<Instance>,
+    instance_buffer: wgpu::Buffer,
 }
 
 struct CameraController {
     position: glam::Vec3,
-    speed: f32
+    speed: f32,
 }
 
 impl CameraController {
@@ -109,7 +113,7 @@ impl CameraController {
             speed: 0.05,
         }
     }
-    
+
     fn process_event(&mut self, event: &WindowEvent) {
         match event {
             WindowEvent::KeyboardInput {
@@ -135,14 +139,44 @@ impl CameraController {
                 };
 
                 self.position += movement * self.speed;
-            },
+            }
             _ => {}
         }
     }
-    
+
     fn update_camera(&self, camera: &mut Camera) {
         camera.position = self.position;
     }
+}
+
+struct Instance {
+    position: Vec3,
+    rotation: Quat,
+}
+
+impl Instance {
+    fn to_raw(&self) -> InstanceRaw {
+        InstanceRaw {
+            model_mtx: (glam::Mat4::from_translation(self.position)
+                * glam::Mat4::from_quat(self.rotation))
+            .to_cols_array_2d(),
+        }
+    }
+
+    fn desc() -> VertexBufferLayout<'static> {
+        const ATTRIBUTES: [VertexAttribute; 4] = wgpu::vertex_attr_array![5 => Float32x4, 6 => Float32x4, 7 => Float32x4, 8 => Float32x4];
+        VertexBufferLayout {
+            array_stride: std::mem::size_of::<InstanceRaw>() as wgpu::BufferAddress,
+            step_mode: wgpu::VertexStepMode::Instance,
+            attributes: &ATTRIBUTES,
+        }
+    }
+}
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+struct InstanceRaw {
+    model_mtx: [[f32; 4]; 4],
 }
 
 impl<'a> State<'a> {
@@ -196,7 +230,7 @@ impl<'a> State<'a> {
             vertex: wgpu::VertexState {
                 module: &vertex_shader,
                 entry_point: Some("main"), // None selects the only entry point for @vertex. Expects only one!!
-                buffers: &[Vertex::desc()],
+                buffers: &[Vertex::desc(), Instance::desc()],
                 compilation_options: PipelineCompilationOptions::default(),
             },
             fragment: Some(wgpu::FragmentState {
@@ -271,40 +305,7 @@ impl<'a> State<'a> {
 
         let config = State::configure_surface(&surface, &adapter, &device, size);
 
-        let (vertex_shader, fragment_shader) = shader_compiler::compile_shaders();
-
-        #[cfg(not(target_os = "macos"))]
-        let (vertex_shader, fragment_shader) = {
-            let vertex_shader = unsafe {
-                device.create_shader_module_spirv(&ShaderModuleDescriptorSpirV {
-                    label: Some("Vertex Shader"),
-                    source: Cow::from(vertex_shader.as_binary()),
-                })
-            };
-            let fragment_shader = unsafe {
-                device.create_shader_module_spirv(&ShaderModuleDescriptorSpirV {
-                    label: Some("Fragment Shader"),
-                    source: Cow::from(fragment_shader.as_binary()),
-                })
-            };
-
-            (vertex_shader, fragment_shader)
-        };
-
-        #[cfg(target_os = "macos")]
-        let (vertex_shader, fragment_shader) = {
-            let vertex_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-                label: Some("Vertex Shader"),
-                source: wgpu::ShaderSource::SpirV(Cow::Borrowed(vertex_shader.as_binary())),
-            });
-
-            let fragment_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-                label: Some("Vertex Shader"),
-                source: wgpu::ShaderSource::SpirV(Cow::Borrowed(fragment_shader.as_binary())),
-            });
-
-            (vertex_shader, fragment_shader)
-        };
+        let (vertex_shader, fragment_shader) = create_shaders(&device);
 
         let diffuse_bytes = include_bytes!("happy-tree.png");
         let diffuse_texture =
@@ -393,6 +394,15 @@ impl<'a> State<'a> {
             usage: wgpu::BufferUsages::INDEX,
         });
 
+        let instances = create_instances();
+        let instances_data: Vec<InstanceRaw> = instances.iter().map(Instance::to_raw).collect();
+
+        let instance_buffer = device.create_buffer_init(&BufferInitDescriptor {
+            label: Some("Instance Buffer"),
+            contents: bytemuck::cast_slice(&instances_data),
+            usage: wgpu::BufferUsages::VERTEX,
+        });
+
         let diffuse_binding_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("Diffuse Bind Group"),
             layout: &bind_group_layout,
@@ -427,6 +437,8 @@ impl<'a> State<'a> {
             camera_buffer,
             camera_uniform: CameraUniform::new(),
             camera_controller: CameraController::new(),
+            instances,
+            instance_buffer,
         }
     }
 
@@ -451,7 +463,11 @@ impl<'a> State<'a> {
     fn update(&mut self) {
         self.camera_controller.update_camera(&mut self.camera);
         self.camera_uniform = self.camera.build_uniform();
-        self.queue.write_buffer(&self.camera_buffer, 0, bytemuck::cast_slice(&[self.camera_uniform]));
+        self.queue.write_buffer(
+            &self.camera_buffer,
+            0,
+            bytemuck::cast_slice(&[self.camera_uniform]),
+        );
     }
 
     fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
@@ -495,8 +511,9 @@ impl<'a> State<'a> {
             render_pass.set_bind_group(0, &self.diffuse_binding_group, &[]);
             render_pass.set_bind_group(1, &self.camera_bind_group, &[]);
             render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+            render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
             render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
-            render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
+            render_pass.draw_indexed(0..self.num_indices, 0, 0..self.instances.len() as _);
         }
 
         self.queue.submit(std::iter::once(encoder.finish()));
@@ -504,6 +521,73 @@ impl<'a> State<'a> {
 
         Ok(())
     }
+}
+
+fn create_instances() -> Vec<Instance> {
+    const INSTANCES_PER_ROW: u32 = 10;
+    const INSTANCE_DISPLACEMENT: Vec3 = Vec3::new(
+        INSTANCES_PER_ROW as f32 * 0.5,
+        0.0,
+        INSTANCES_PER_ROW as f32 * 0.5,
+    );
+
+    (0..INSTANCES_PER_ROW)
+        .flat_map(|z| {
+            (0..INSTANCES_PER_ROW).map(move |x| {
+                let position = glam::Vec3::new(x as f32, 0.0, z as f32);
+
+                let rotation;
+                if position == glam::Vec3::ZERO {
+                    rotation = glam::Quat::from_axis_angle(glam::Vec3::Y, 0.0);
+                } else {
+                    rotation = glam::Quat::from_axis_angle(
+                        position.normalize(),
+                        std::f32::consts::PI / 4.0,
+                    );
+                }
+
+                Instance { position, rotation }
+            })
+        })
+        .collect()
+}
+
+fn create_shaders(device: &wgpu::Device) -> (wgpu::ShaderModule, wgpu::ShaderModule) {
+    let (vertex_shader, fragment_shader) = shader_compiler::compile_shaders();
+
+    #[cfg(not(target_os = "macos"))]
+    let (vertex_shader, fragment_shader) = {
+        let vertex_shader = unsafe {
+            device.create_shader_module_spirv(&ShaderModuleDescriptorSpirV {
+                label: Some("Vertex Shader"),
+                source: Cow::from(vertex_shader.as_binary()),
+            })
+        };
+        let fragment_shader = unsafe {
+            device.create_shader_module_spirv(&ShaderModuleDescriptorSpirV {
+                label: Some("Fragment Shader"),
+                source: Cow::from(fragment_shader.as_binary()),
+            })
+        };
+
+        (vertex_shader, fragment_shader)
+    };
+
+    #[cfg(target_os = "macos")]
+    let (vertex_shader, fragment_shader) = {
+        let vertex_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("Vertex Shader"),
+            source: wgpu::ShaderSource::SpirV(Cow::Borrowed(vertex_shader.as_binary())),
+        });
+
+        let fragment_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("Vertex Shader"),
+            source: wgpu::ShaderSource::SpirV(Cow::Borrowed(fragment_shader.as_binary())),
+        });
+
+        (vertex_shader, fragment_shader)
+    };
+    (vertex_shader, fragment_shader)
 }
 
 pub fn run() -> Result<(), EventLoopError> {
