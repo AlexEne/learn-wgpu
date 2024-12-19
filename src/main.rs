@@ -258,7 +258,7 @@ impl<'a> State<'a> {
             depth_stencil: Some(DepthStencilState {
                 format: wgpu::TextureFormat::Depth32Float,
                 depth_write_enabled: true,
-                depth_compare: wgpu::CompareFunction::Less,
+                depth_compare: wgpu::CompareFunction::Greater,
                 stencil: Default::default(),
                 bias: Default::default(),
             }),
@@ -345,7 +345,7 @@ impl<'a> State<'a> {
             position: glam::Vec3::new(0.0, 1.0, 2.0),
             center: glam::Vec3::new(0.0, 0.0, 0.0),
             up: glam::Vec3::Y,
-            fov: 45.0,
+            fov: 45.0_f32.to_radians(),
             aspect_ratio: config.width as f32 / config.height as f32,
             near: 0.1,
             far: 100.0,
@@ -516,7 +516,7 @@ impl<'a> State<'a> {
                 depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
                     view: &self.depth_texture.view,
                     depth_ops: Some(wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(1.0),
+                        load: wgpu::LoadOp::Clear(0.0),
                         store: wgpu::StoreOp::Store,
                     }),
                     stencil_ops: None,
