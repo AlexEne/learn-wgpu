@@ -1,4 +1,5 @@
 use shaderc::{CompileOptions, IncludeType, ResolvedInclude};
+
 struct MyIncludeResolver;
 
 impl MyIncludeResolver {
@@ -25,10 +26,10 @@ impl MyIncludeResolver {
             }
         };
 
-        println!("{:?}", env::current_dir());
+        println!("{:?}", std::env::current_dir());
 
         // Read the file's contents
-        let include_path = "./src/shaders-glsl/".to_owned() + &include_path;
+        let include_path = "./src/shaders/".to_owned() + &include_path;
         let source_code = std::fs::read_to_string(&include_path)
             .map_err(|e| format!("Failed to load include file {}: {}", include_path, e))?;
 
@@ -39,14 +40,14 @@ impl MyIncludeResolver {
     }
 }
 
-fn compile_shaders() -> (shaderc::CompilationArtifact, shaderc::CompilationArtifact) {
+pub fn compile_shaders() -> (shaderc::CompilationArtifact, shaderc::CompilationArtifact) {
     let compiler = shaderc::Compiler::new().unwrap();
-    let mut compile_options = shaderc::CompileOptions::new().unwrap();
+    let mut compile_options = CompileOptions::new().unwrap();
     compile_options.set_include_callback(MyIncludeResolver::resolve_include);
 
     let vertex_shader = compiler
         .compile_into_spirv(
-            include_str!("shaders-glsl/vertex_shader.vert"),
+            include_str!("shaders/vertex_shader.vert"),
             shaderc::ShaderKind::Vertex,
             "shader.vert",
             "main",
@@ -56,7 +57,7 @@ fn compile_shaders() -> (shaderc::CompilationArtifact, shaderc::CompilationArtif
 
     let fragment_shader = compiler
         .compile_into_spirv(
-            include_str!("shaders-glsl/fragment.frag"),
+            include_str!("shaders/fragment.frag"),
             shaderc::ShaderKind::Fragment,
             "fragment.frag",
             "main",
