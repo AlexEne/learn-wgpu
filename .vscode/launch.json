@@ -20,7 +20,8 @@
             "name": "LLDB Debug executable 'learn_wgpu'",
             "args": [],
             "cwd": "${workspaceFolder}",
-            "preLaunchTask": "rust: cargo build"
+            "preLaunchTask": "rust: cargo build",
+            "sourceLanguages": ["rust"]
         }
     ]
 }
