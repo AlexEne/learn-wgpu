@@ -115,7 +115,7 @@ impl Instance {
     fn to_raw(&self) -> InstanceRaw {
         InstanceRaw {
             model_mtx: (glam::Mat4::from_translation(self.position)
-                // * glam::Mat4::from_quat(self.rotation)
+                * glam::Mat4::from_quat(self.rotation)
                 * glam::Mat4::from_scale(Vec3::splat(10.0)))
             .to_cols_array_2d(),
         }
@@ -356,7 +356,7 @@ impl<'a> State<'a> {
         let instance_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: Some("Instance Buffer"),
             contents: bytemuck::cast_slice(&instances_data),
-            usage: wgpu::BufferUsages::VERTEX,
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
         });
 
         let diffuse_binding_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -427,6 +427,13 @@ impl<'a> State<'a> {
             0,
             bytemuck::cast_slice(&[self.camera_uniform]),
         );
+        
+        for instance in self.instances.iter_mut() {
+            instance.rotation *= Quat::from_rotation_y(0.02);
+        }
+    
+        let instances_data: Vec<InstanceRaw> = self.instances.iter().map(Instance::to_raw).collect();
+        self.queue.write_buffer(&self.instance_buffer, 0, bytemuck::cast_slice(&instances_data));
     }
 
     fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
