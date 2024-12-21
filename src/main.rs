@@ -4,7 +4,7 @@ mod shader_compiler;
 mod texture;
 use std::borrow::Cow;
 
-use camera::{Camera, CameraUniform};
+use camera::{Camera, CameraGraphicsObject, CameraUniform};
 use glam::{Quat, Vec3};
 mod light;
 use light::{LightModel, LightVertex};
@@ -49,6 +49,7 @@ struct State<'a> {
 
     camera: Camera,
     camera_controller: CameraController,
+    camera_graphics_object: CameraGraphicsObject,
 
     instances: Vec<Instance>,
     instance_buffer: wgpu::Buffer,
@@ -320,7 +321,6 @@ impl<'a> State<'a> {
         });
 
         let camera = Camera::new(
-            &device,
             glam::Vec3::new(0.0, 1.0, 2.0),
             glam::Vec3::new(0.0, 0.0, 0.0),
             glam::Vec3::Y,
@@ -328,8 +328,10 @@ impl<'a> State<'a> {
             config.width as f32 / config.height as f32,
             0.1,
         );
+        let camera_graphics_object = CameraGraphicsObject::new(&device);
 
-        let light_model = LightModel::new(&device, &camera.bind_group_layout(), &config);
+        let light_model =
+            LightModel::new(&device, &camera_graphics_object.bind_group_layout, &config);
         let light = LightUniform {
             position: light_model.position.into(),
             _padding: 0.0,
@@ -372,7 +374,7 @@ impl<'a> State<'a> {
             vertex_shader,
             fragment_shader,
             &bind_group_layout,
-            camera.bind_group_layout(),
+            &camera_graphics_object.bind_group_layout,
             &light_bind_group_layout,
         );
 
@@ -426,6 +428,7 @@ impl<'a> State<'a> {
             depth_texture,
             model,
             light_model,
+            camera_graphics_object,
         }
     }
 
@@ -450,7 +453,8 @@ impl<'a> State<'a> {
 
     fn update(&mut self) {
         self.camera_controller.update_camera(&mut self.camera);
-        self.camera.update(&self.queue);
+        self.camera_graphics_object
+            .update(&self.queue, self.camera.build_uniform());
 
         for instance in self.instances.iter_mut() {
             instance.rotation *= Quat::from_rotation_y(0.02);
@@ -511,7 +515,7 @@ impl<'a> State<'a> {
             // computerrender_pass.set_vertex_buffer(slot, buffer_slice);
             render_pass.set_pipeline(&self.pipeline);
             render_pass.set_bind_group(0, &self.diffuse_binding_group, &[]);
-            render_pass.set_bind_group(1, self.camera.bind_group(), &[]);
+            render_pass.set_bind_group(1, &self.camera_graphics_object.bind_group, &[]);
             render_pass.set_bind_group(2, &self.light_bind_group, &[]);
 
             render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
@@ -520,7 +524,7 @@ impl<'a> State<'a> {
             render_pass.draw_indexed(0..self.model.num_indices(), 0, 0..self.instances.len() as _);
 
             self.light_model
-                .render(&mut render_pass, self.camera.bind_group());
+                .render(&mut render_pass, &self.camera_graphics_object.bind_group);
         }
 
         self.queue.submit(std::iter::once(encoder.finish()));

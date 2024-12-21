@@ -27,8 +27,6 @@ pub struct Camera {
     pub fov: f32,
     pub aspect_ratio: f32,
     pub near: f32,
-
-    camera_grapics_object: CameraGraphicsObject,
 }
 
 pub struct CameraGraphicsObject {
@@ -74,11 +72,18 @@ impl CameraGraphicsObject {
             bind_group_layout,
         }
     }
+    
+    pub fn update(&self, queue: &wgpu::Queue, camera_uniform: CameraUniform) {
+        queue.write_buffer(
+            &self.uniform_buffer,
+            0,
+            bytemuck::cast_slice(&[camera_uniform]),
+        );
+    }
 }
 
 impl Camera {
     pub fn new(
-        device: &Device,
         position: Vec3,
         center: Vec3,
         up: Vec3,
@@ -86,7 +91,6 @@ impl Camera {
         aspect_ratio: f32,
         near: f32,
     ) -> Camera {
-        let camera_grapics_object = CameraGraphicsObject::new(device);
         Camera {
             position,
             center,
@@ -94,7 +98,6 @@ impl Camera {
             fov,
             aspect_ratio,
             near,
-            camera_grapics_object,
         }
     }
 
@@ -112,26 +115,5 @@ impl Camera {
         }
     }
 
-    pub fn update(&self, queue: &wgpu::Queue) {
-        let camera_uniform = self.build_uniform();
-        queue.write_buffer(
-            &self.camera_grapics_object.uniform_buffer,
-            0,
-            bytemuck::cast_slice(&[camera_uniform]),
-        );
-
-        queue.write_buffer(
-            &self.camera_grapics_object.uniform_buffer,
-            0,
-            bytemuck::cast_slice(&[self.build_uniform()]),
-        );
-    }
-
-    pub fn bind_group_layout(&self) -> &wgpu::BindGroupLayout {
-        &self.camera_grapics_object.bind_group_layout
-    }
-
-    pub fn bind_group(&self) -> &wgpu::BindGroup {
-        &self.camera_grapics_object.bind_group
-    }
+ 
 }
