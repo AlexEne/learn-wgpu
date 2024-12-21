@@ -24,6 +24,6 @@ void main()
     v_position = pos.xyz;
     gl_Position = camera_mat * pos;
     v_tex_coords = tex_coords;
-    v_normal = (object_mtx * vec4(normal, 1.0)).xyz;
+    v_normal = normalize((object_mtx * vec4(normal, 1.0)).xyz);
 }
 
