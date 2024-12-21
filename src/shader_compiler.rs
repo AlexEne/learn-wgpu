@@ -40,27 +40,36 @@ impl MyIncludeResolver {
     }
 }
 
-pub fn compile_shaders() -> (shaderc::CompilationArtifact, shaderc::CompilationArtifact) {
+pub struct ShaderInput<'a> {
+    pub shader_code: &'a str,
+    pub file_name: &'a str,
+    pub entry_point: &'a str,
+}
+
+pub fn compile_shaders(
+    vertex_shader: ShaderInput,
+    fragment_shader: ShaderInput,
+) -> (shaderc::CompilationArtifact, shaderc::CompilationArtifact) {
     let compiler = shaderc::Compiler::new().unwrap();
     let mut compile_options = CompileOptions::new().unwrap();
     compile_options.set_include_callback(MyIncludeResolver::resolve_include);
 
     let vertex_shader = compiler
         .compile_into_spirv(
-            include_str!("shaders/vertex_shader.vert"),
+            vertex_shader.shader_code,
             shaderc::ShaderKind::Vertex,
-            "shader.vert",
-            "main",
+            vertex_shader.file_name,
+            vertex_shader.entry_point,
             Some(&compile_options),
         )
         .unwrap();
 
     let fragment_shader = compiler
         .compile_into_spirv(
-            include_str!("shaders/fragment.frag"),
+            fragment_shader.shader_code,
             shaderc::ShaderKind::Fragment,
-            "fragment.frag",
-            "main",
+            fragment_shader.file_name,
+            fragment_shader.entry_point,
             Some(&compile_options),
         )
         .unwrap();

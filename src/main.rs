@@ -6,6 +6,8 @@ use std::borrow::Cow;
 
 use camera::{Camera, CameraUniform};
 use glam::{Quat, Vec3};
+mod light;
+use light::{LightModel, LightVertex};
 use model::{Model, ModelVertex, Vertex};
 use wgpu::{
     include_spirv_raw,
@@ -14,8 +16,9 @@ use wgpu::{
     ColorTargetState, ColorWrites, CommandEncoderDescriptor, DepthStencilState, Features,
     InstanceDescriptor, Limits, MemoryHints, MultisampleState, PipelineCompilationOptions,
     PrimitiveState, RenderPassColorAttachment, RenderPassDescriptor, RenderPipeline,
-    RenderPipelineDescriptor, ShaderModuleDescriptorSpirV, ShaderSource, ShaderStages,
-    SurfaceConfiguration, SurfaceError, TextureViewDescriptor, VertexAttribute, VertexBufferLayout,
+    RenderPipelineDescriptor, ShaderModuleDescriptor, ShaderModuleDescriptorSpirV, ShaderSource,
+    ShaderStages, SurfaceConfiguration, SurfaceError, TextureViewDescriptor, VertexAttribute,
+    VertexBufferLayout,
 };
 use winit::{
     error::EventLoopError,
@@ -56,6 +59,12 @@ struct State<'a> {
     depth_texture: texture::Texture,
 
     model: Model,
+
+    light_buffer: wgpu::Buffer,
+    light_uniform: LightUniform,
+    light_bind_group: wgpu::BindGroup,
+    
+    light_model: LightModel,
 }
 
 struct CameraController {
@@ -137,6 +146,15 @@ struct InstanceRaw {
     model_mtx: [[f32; 4]; 4],
 }
 
+#[repr(C)]
+#[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+struct LightUniform {
+    position: [f32; 3],
+    _padding: f32,
+    color: [f32; 3],
+    _padding2: f32,
+}
+
 impl<'a> State<'a> {
     fn configure_surface(
         surface: &wgpu::Surface,
@@ -174,10 +192,15 @@ impl<'a> State<'a> {
         fragment_shader: wgpu::ShaderModule,
         bind_group_layout: &wgpu::BindGroupLayout,
         camera_group_layout: &wgpu::BindGroupLayout,
+        light_bind_group_layout: &wgpu::BindGroupLayout,
     ) -> RenderPipeline {
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("Pipeline Layout"),
-            bind_group_layouts: &[bind_group_layout, camera_group_layout],
+            bind_group_layouts: &[
+                bind_group_layout,
+                camera_group_layout,
+                light_bind_group_layout,
+            ],
             push_constant_ranges: &[],
         });
 
@@ -339,6 +362,42 @@ impl<'a> State<'a> {
             }],
         });
 
+        let light = LightUniform {
+            position: [0.0, 2.0, 0.0],
+            _padding: 0.0,
+            color: [1.0, 0.7, 0.7],
+            _padding2: 0.0,
+        };
+
+        let light_buffer = device.create_buffer_init(&BufferInitDescriptor {
+            label: Some("Light Buffer"),
+            contents: bytemuck::cast_slice(&[light]),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
+
+        let light_bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+            label: Some("Light buffer bind group layout"),
+            entries: &[BindGroupLayoutEntry {
+                binding: 0,
+                visibility: ShaderStages::FRAGMENT,
+                ty: BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            }],
+        });
+
+        let light_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("Light Bind Group"),
+            layout: &light_bind_group_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: light_buffer.as_entire_binding(),
+            }],
+        });
+
         let pipeline = State::create_pipeline(
             &device,
             &config,
@@ -346,6 +405,7 @@ impl<'a> State<'a> {
             fragment_shader,
             &bind_group_layout,
             &camera_bind_group_layout,
+            &light_bind_group_layout,
         );
 
         let (vertex_buffer, index_buffer) = model.create_buffers(&device);
@@ -376,6 +436,8 @@ impl<'a> State<'a> {
 
         let depth_texture = texture::Texture::create_depth_texture(&device, &config);
 
+        let light_model = LightModel::new(&device, &camera_bind_group_layout, &config);
+        
         State {
             pipeline,
             surface,
@@ -395,8 +457,12 @@ impl<'a> State<'a> {
             camera_controller: CameraController::new(),
             instances,
             instance_buffer,
+            light_buffer,
+            light_uniform: light,
+            light_bind_group,
             depth_texture,
             model,
+            light_model,
         }
     }
 
@@ -427,13 +493,18 @@ impl<'a> State<'a> {
             0,
             bytemuck::cast_slice(&[self.camera_uniform]),
         );
-        
+
         for instance in self.instances.iter_mut() {
             instance.rotation *= Quat::from_rotation_y(0.02);
         }
-    
-        let instances_data: Vec<InstanceRaw> = self.instances.iter().map(Instance::to_raw).collect();
-        self.queue.write_buffer(&self.instance_buffer, 0, bytemuck::cast_slice(&instances_data));
+
+        let instances_data: Vec<InstanceRaw> =
+            self.instances.iter().map(Instance::to_raw).collect();
+        self.queue.write_buffer(
+            &self.instance_buffer,
+            0,
+            bytemuck::cast_slice(&instances_data),
+        );
     }
 
     fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
@@ -483,10 +554,14 @@ impl<'a> State<'a> {
             render_pass.set_pipeline(&self.pipeline);
             render_pass.set_bind_group(0, &self.diffuse_binding_group, &[]);
             render_pass.set_bind_group(1, &self.camera_bind_group, &[]);
+            render_pass.set_bind_group(2, &self.light_bind_group, &[]);
+
             render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
             render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
             render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
             render_pass.draw_indexed(0..self.model.num_indices(), 0, 0..self.instances.len() as _);
+            
+            self.light_model.render(&mut render_pass, &self.camera_bind_group);
         }
 
         self.queue.submit(std::iter::once(encoder.finish()));
@@ -526,7 +601,18 @@ fn create_instances() -> Vec<Instance> {
 }
 
 fn create_shaders(device: &wgpu::Device) -> (wgpu::ShaderModule, wgpu::ShaderModule) {
-    let (vertex_shader, fragment_shader) = shader_compiler::compile_shaders();
+    let (vertex_shader, fragment_shader) = shader_compiler::compile_shaders(
+        shader_compiler::ShaderInput {
+            shader_code: include_str!("shaders/vertex_shader.vert"),
+            file_name: "vertex_shader.vert",
+            entry_point: "main",
+        },
+        shader_compiler::ShaderInput {
+            shader_code: include_str!("shaders/fragment.frag"),
+            file_name: "fragment.frag",
+            entry_point: "main",
+        },
+    );
 
     #[cfg(not(target_os = "macos"))]
     let (vertex_shader, fragment_shader) = {

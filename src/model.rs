@@ -12,6 +12,7 @@ pub trait Vertex {
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct ModelVertex {
     pub position: [f32; 3],
+    pub normal: [f32; 3],
     pub tex_coords: [f32; 2],
 }
 
@@ -34,9 +35,12 @@ impl Model {
                 let tex_coords: Vec<[f32; 2]> =
                     reader.read_tex_coords(0).unwrap().into_f32().collect();
 
-                for (position, tex_coord) in positions.zip(tex_coords) {
+                let normals = reader.read_normals().unwrap();
+
+                for ((position, tex_coord), normal) in positions.zip(tex_coords).zip(normals) {
                     let vertex = ModelVertex {
                         position,
+                        normal,
                         tex_coords: tex_coord,
                     };
                     vertices.push(vertex);
@@ -73,8 +77,8 @@ impl Model {
 
 impl Vertex for ModelVertex {
     fn desc() -> wgpu::VertexBufferLayout<'static> {
-        const ATTRIBUTES: [VertexAttribute; 2] =
-            wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x2];
+        const ATTRIBUTES: [VertexAttribute; 3] =
+            wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x2];
 
         VertexBufferLayout {
             array_stride: std::mem::size_of::<ModelVertex>() as wgpu::BufferAddress,
