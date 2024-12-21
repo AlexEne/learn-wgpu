@@ -48,9 +48,6 @@ struct State<'a> {
     diffuse_texture: texture::Texture,
 
     camera: Camera,
-    camera_uniform: CameraUniform,
-    camera_buffer: wgpu::Buffer,
-    camera_bind_group: wgpu::BindGroup,
     camera_controller: CameraController,
 
     instances: Vec<Instance>,
@@ -322,47 +319,17 @@ impl<'a> State<'a> {
             ],
         });
 
-        let camera = Camera {
-            position: glam::Vec3::new(0.0, 1.0, 2.0),
-            center: glam::Vec3::new(0.0, 0.0, 0.0),
-            up: glam::Vec3::Y,
-            fov: 45.0_f32.to_radians(),
-            aspect_ratio: config.width as f32 / config.height as f32,
-            near: 0.1,
-            far: 100.0,
-        };
+        let camera = Camera::new(
+            &device,
+            glam::Vec3::new(0.0, 1.0, 2.0),
+            glam::Vec3::new(0.0, 0.0, 0.0),
+            glam::Vec3::Y,
+            45.0_f32.to_radians(),
+            config.width as f32 / config.height as f32,
+            0.1,
+        );
 
-        let camera_buffer = device.create_buffer_init(&BufferInitDescriptor {
-            label: Some("Camera Buffer"),
-            contents: bytemuck::cast_slice(&[camera.build_uniform()]),
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-        });
-
-        let camera_bind_group_layout =
-            device.create_bind_group_layout(&BindGroupLayoutDescriptor {
-                label: Some("Camera Bind Group Layout"),
-                entries: &[BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: ShaderStages::VERTEX,
-                    ty: BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                }],
-            });
-
-        let camera_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("Camera Bind Group"),
-            layout: &camera_bind_group_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: camera_buffer.as_entire_binding(),
-            }],
-        });
-
-        let light_model = LightModel::new(&device, &camera_bind_group_layout, &config);
+        let light_model = LightModel::new(&device, &camera.bind_group_layout(), &config);
         let light = LightUniform {
             position: light_model.position.into(),
             _padding: 0.0,
@@ -405,7 +372,7 @@ impl<'a> State<'a> {
             vertex_shader,
             fragment_shader,
             &bind_group_layout,
-            &camera_bind_group_layout,
+            camera.bind_group_layout(),
             &light_bind_group_layout,
         );
 
@@ -450,9 +417,6 @@ impl<'a> State<'a> {
             diffuse_binding_group,
             diffuse_texture,
             camera,
-            camera_bind_group,
-            camera_buffer,
-            camera_uniform: CameraUniform::new(),
             camera_controller: CameraController::new(),
             instances,
             instance_buffer,
@@ -486,12 +450,7 @@ impl<'a> State<'a> {
 
     fn update(&mut self) {
         self.camera_controller.update_camera(&mut self.camera);
-        self.camera_uniform = self.camera.build_uniform();
-        self.queue.write_buffer(
-            &self.camera_buffer,
-            0,
-            bytemuck::cast_slice(&[self.camera_uniform]),
-        );
+        self.camera.update(&self.queue);
 
         for instance in self.instances.iter_mut() {
             instance.rotation *= Quat::from_rotation_y(0.02);
@@ -552,7 +511,7 @@ impl<'a> State<'a> {
             // computerrender_pass.set_vertex_buffer(slot, buffer_slice);
             render_pass.set_pipeline(&self.pipeline);
             render_pass.set_bind_group(0, &self.diffuse_binding_group, &[]);
-            render_pass.set_bind_group(1, &self.camera_bind_group, &[]);
+            render_pass.set_bind_group(1, self.camera.bind_group(), &[]);
             render_pass.set_bind_group(2, &self.light_bind_group, &[]);
 
             render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
@@ -561,7 +520,7 @@ impl<'a> State<'a> {
             render_pass.draw_indexed(0..self.model.num_indices(), 0, 0..self.instances.len() as _);
 
             self.light_model
-                .render(&mut render_pass, &self.camera_bind_group);
+                .render(&mut render_pass, self.camera.bind_group());
         }
 
         self.queue.submit(std::iter::once(encoder.finish()));
