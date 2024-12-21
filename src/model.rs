@@ -1,5 +1,8 @@
 use gltf::mesh::util::indices;
-use wgpu::{util::{BufferInitDescriptor, DeviceExt}, VertexAttribute, VertexBufferLayout};
+use wgpu::{
+    util::{BufferInitDescriptor, DeviceExt},
+    VertexAttribute, VertexBufferLayout,
+};
 
 pub trait Vertex {
     fn desc() -> wgpu::VertexBufferLayout<'static>;
@@ -22,49 +25,47 @@ impl Model {
         let (document, buffers, _images) = gltf::import(path).unwrap();
         let mut vertices = vec![];
         let mut indices = vec![];
-        
+
         for mesh in document.meshes() {
             for primitive in mesh.primitives() {
                 let reader = primitive.reader(|buffer| Some(&buffers[buffer.index()]));
-                
+
                 let positions = reader.read_positions().unwrap();
-                let tex_coords: Vec<[f32; 2]> = reader.read_tex_coords(0).unwrap().into_f32().collect();
-                
-                for(position, tex_coord) in positions.zip(tex_coords) {
+                let tex_coords: Vec<[f32; 2]> =
+                    reader.read_tex_coords(0).unwrap().into_f32().collect();
+
+                for (position, tex_coord) in positions.zip(tex_coords) {
                     let vertex = ModelVertex {
                         position,
                         tex_coords: tex_coord,
                     };
                     vertices.push(vertex);
                 }
-                
+
                 indices = reader.read_indices().unwrap().into_u32().collect();
                 break;
             }
         }
-        
-        Model {
-            vertices,
-            indices,
-        }
+
+        Model { vertices, indices }
     }
-    
+
     pub fn create_buffers(&self, device: &wgpu::Device) -> (wgpu::Buffer, wgpu::Buffer) {
-        let vertex_buffer = device.create_buffer_init(&BufferInitDescriptor{
+        let vertex_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: Some("Vertex Buffer"),
             contents: bytemuck::cast_slice(&self.vertices),
             usage: wgpu::BufferUsages::VERTEX,
         });
-        
-        let index_buffer = device.create_buffer_init(&BufferInitDescriptor{
+
+        let index_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: Some("Index Buffer"),
             contents: bytemuck::cast_slice(&self.indices),
             usage: wgpu::BufferUsages::INDEX,
         });
-        
+
         (vertex_buffer, index_buffer)
     }
-    
+
     pub fn num_indices(&self) -> u32 {
         self.indices.len() as u32
     }
