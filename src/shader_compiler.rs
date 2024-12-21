@@ -26,8 +26,6 @@ impl MyIncludeResolver {
             }
         };
 
-        println!("{:?}", std::env::current_dir());
-
         // Read the file's contents
         let include_path = "./src/shaders/".to_owned() + &include_path;
         let source_code = std::fs::read_to_string(&include_path)
