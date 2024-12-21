@@ -72,7 +72,7 @@ impl CameraGraphicsObject {
             bind_group_layout,
         }
     }
-    
+
     pub fn update(&self, queue: &wgpu::Queue, camera_uniform: CameraUniform) {
         queue.write_buffer(
             &self.uniform_buffer,
@@ -114,6 +114,4 @@ impl Camera {
             cam: view_projection.to_cols_array_2d(),
         }
     }
-
- 
 }
