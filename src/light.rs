@@ -73,19 +73,16 @@ impl LightModel {
                     count: None,
                 }],
             });
- 
+
         let position = Vec3::new(0.0, 0.3, 0.3);
         let data = glam::Mat4::from_translation(position).to_cols_array();
         println!("{:?}", data);
         let light_object_transform_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: Some("Light object transform buffer"),
-            contents: bytemuck::cast_slice(
-                    data
-                    .as_ref(),
-            ),
+            contents: bytemuck::cast_slice(data.as_ref()),
             usage: wgpu::BufferUsages::UNIFORM,
         });
-        
+
         let light_obj_transform_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             layout: &object_transform_bind_group_layout,
             entries: &[wgpu::BindGroupEntry {

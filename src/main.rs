@@ -63,7 +63,7 @@ struct State<'a> {
     light_buffer: wgpu::Buffer,
     light_uniform: LightUniform,
     light_bind_group: wgpu::BindGroup,
-    
+
     light_model: LightModel,
 }
 
@@ -362,8 +362,9 @@ impl<'a> State<'a> {
             }],
         });
 
+        let light_model = LightModel::new(&device, &camera_bind_group_layout, &config);
         let light = LightUniform {
-            position: [0.0, 2.0, 0.0],
+            position: light_model.position.into(),
             _padding: 0.0,
             color: [1.0, 0.7, 0.7],
             _padding2: 0.0,
@@ -436,8 +437,6 @@ impl<'a> State<'a> {
 
         let depth_texture = texture::Texture::create_depth_texture(&device, &config);
 
-        let light_model = LightModel::new(&device, &camera_bind_group_layout, &config);
-        
         State {
             pipeline,
             surface,
@@ -560,8 +559,9 @@ impl<'a> State<'a> {
             render_pass.set_vertex_buffer(1, self.instance_buffer.slice(..));
             render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint32);
             render_pass.draw_indexed(0..self.model.num_indices(), 0, 0..self.instances.len() as _);
-            
-            self.light_model.render(&mut render_pass, &self.camera_bind_group);
+
+            self.light_model
+                .render(&mut render_pass, &self.camera_bind_group);
         }
 
         self.queue.submit(std::iter::once(encoder.finish()));
