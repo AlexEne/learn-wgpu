@@ -21,7 +21,7 @@ void main()
 {
     vec3 light_dir = normalize(light.position - v_world_position);
     float diffuse_strength = max(dot(v_normal, light_dir), 0.0);
-    diffuse_strength = min(diffuse_strength, 0.8);
+    diffuse_strength = min(diffuse_strength, 0.9);
     vec3 diffuse_color = light.color * diffuse_strength;
     
     vec3 light_ambient_strength = vec3(0.1);
