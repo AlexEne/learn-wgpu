@@ -1,3 +1,4 @@
+use crate::material::MaterialData;
 use gltf::mesh::util::indices;
 use wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
@@ -19,6 +20,7 @@ pub struct ModelVertex {
 pub struct Model {
     pub vertices: Vec<ModelVertex>,
     pub indices: Vec<u32>, // A bit wasteful since they could be u16
+    pub material: MaterialData,
 }
 
 impl Model {
@@ -26,6 +28,7 @@ impl Model {
         let (document, buffers, _images) = gltf::import(path).unwrap();
         let mut vertices = vec![];
         let mut indices = vec![];
+        let mut base_color_texture = vec![];
 
         for mesh in document.meshes() {
             for primitive in mesh.primitives() {
@@ -47,14 +50,38 @@ impl Model {
                 }
 
                 indices = reader.read_indices().unwrap().into_u32().collect();
+
+                let primitive_material = primitive.material();
+                let base_texture = primitive_material
+                    .pbr_metallic_roughness()
+                    .base_color_texture()
+                    .unwrap();
+                let source = base_texture.texture().source().source();
+
+                match source {
+                    gltf::image::Source::View { view, .. } => {
+                        let buffer = &buffers[view.buffer().index()];
+                        let start = view.offset();
+                        let end = start + view.length();
+                        base_color_texture = buffer[start..end].to_vec();
+                    }
+                    _ => {
+                        panic!("Unsupported texture source (URI)");
+                    }
+                }
+
                 break;
             }
         }
 
-        Model { vertices, indices }
+        Model {
+            vertices,
+            indices,
+            material: MaterialData::new(base_color_texture),
+        }
     }
 
-    pub fn create_buffers(&self, device: &wgpu::Device) -> (wgpu::Buffer, wgpu::Buffer) {
+    fn create_buffers(&self, device: &wgpu::Device) -> (wgpu::Buffer, wgpu::Buffer) {
         let vertex_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: Some("Vertex Buffer"),
             contents: bytemuck::cast_slice(&self.vertices),
@@ -70,8 +97,16 @@ impl Model {
         (vertex_buffer, index_buffer)
     }
 
-    pub fn num_indices(&self) -> u32 {
-        self.indices.len() as u32
+    pub fn create_gpu_data(&self, device: &wgpu::Device) -> ModelGPUData {
+        let (vertex_buffer, index_buffer) = self.create_buffers(device);
+        ModelGPUData {
+            vertex_buffer,
+            index_buffer: WGPUIndexBufferData {
+                index_buffer,
+                num_indices: self.indices.len() as _,
+                index_buffer_format: wgpu::IndexFormat::Uint32, // Wasteful for now
+            },
+        }
     }
 }
 
@@ -86,4 +121,21 @@ impl Vertex for ModelVertex {
             attributes: &ATTRIBUTES,
         }
     }
+}
+
+pub struct ModelGPUData {
+    pub vertex_buffer: wgpu::Buffer,
+    pub index_buffer: WGPUIndexBufferData,
+}
+
+pub struct ModelGPUDataInstanced {
+    pub model_gpu_data: ModelGPUData,
+    pub instance_buffer: wgpu::Buffer,
+    pub num_instances: u32,
+}
+
+pub struct WGPUIndexBufferData {
+    pub index_buffer: wgpu::Buffer,
+    pub num_indices: u32,
+    pub index_buffer_format: wgpu::IndexFormat,
 }
