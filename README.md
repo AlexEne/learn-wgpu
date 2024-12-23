@@ -40,4 +40,34 @@ Is it flexible and easy to extend in the right places?
 In the meantime, here's some Avocados rendered with it:
 <img width="799" alt="Screenshot 2024-12-22 at 16 20 58" src="https://github.com/user-attachments/assets/aec17b46-d23e-459e-937a-88d887e6c27c" />
 
+## Some things I found useful
+
+https://interplayoflight.wordpress.com/2017/11/15/experiments-in-gpu-based-occlusion-culling/
+
+https://vkguide.dev/docs/gpudriven/compute_culling/
+
+WebGPU occlusion query:   
+https://jsgist.org/?src=907078b04dde43a95d34d6ba46a21f69   
+https://github.com/samdauwe/webgpu-native-examples/blob/master/src/examples/occlusion_query.c
+
+[Culling Data-oriented design in practice](https://www.youtube.com/watch?v=IXE06TlWDgw)
+
+[Learning Vulkan by writing my own engine](https://edw.is/learning-vulkan/)
+
+Vulkan and rust: https://kylemayes.github.io/vulkanalia/
+
+[Building a vulkan renderer from scratch series](https://www.youtube.com/watch?v=BR2my8OE1Sc&list=PL0JVLUVCkk-l7CWCn3-cdftR0oajugYvd)
+
+[Learn WebGPU C++](https://eliemichel.github.io/LearnWebGPU/#)
+
+[Learn WGPU Rust](https://sotrh.github.io/learn-wgpu/#what-is-wgpu)
+
+[Hype hype rendering architecture for mobile](https://www.youtube.com/watch?v=m3bW8d4Brec)
+
+Anton's OpenGL 4 tutorial: https://capnramses.itch.io/antons-opengl-4-tutorials
+
+Bounding volume hierarchies: https://docs.rs/obvhs/latest/obvhs/
+
+Blender + painting tutorial: https://ercesubasi.gumroad.com/l/handpainting_tutorial
+
 
