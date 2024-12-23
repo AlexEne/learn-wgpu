@@ -70,4 +70,6 @@ Bounding volume hierarchies: https://docs.rs/obvhs/latest/obvhs/
 
 Blender + painting tutorial: https://ercesubasi.gumroad.com/l/handpainting_tutorial
 
+https://toji.dev/webgpu-gltf-case-study/
+
 
