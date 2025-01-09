@@ -505,13 +505,13 @@ fn create_shaders(device: &wgpu::Device) -> (wgpu::ShaderModule, wgpu::ShaderMod
     #[cfg(not(target_os = "macos"))]
     let (vertex_shader, fragment_shader) = {
         let vertex_shader = unsafe {
-            device.create_shader_module_spirv(&ShaderModuleDescriptorSpirV {
+            device.create_shader_module_spirv(&wgpu::ShaderModuleDescriptorSpirV {
                 label: Some("Vertex Shader"),
                 source: Cow::from(vertex_shader.as_binary()),
             })
         };
         let fragment_shader = unsafe {
-            device.create_shader_module_spirv(&ShaderModuleDescriptorSpirV {
+            device.create_shader_module_spirv(&wgpu::ShaderModuleDescriptorSpirV {
                 label: Some("Fragment Shader"),
                 source: Cow::from(fragment_shader.as_binary()),
             })
