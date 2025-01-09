@@ -11,7 +11,10 @@ use wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
     Buffer, BufferDescriptor, Device,
 };
-use winit::{event::{ElementState, KeyEvent, WindowEvent}, keyboard::{KeyCode, PhysicalKey}};
+use winit::{
+    event::{ElementState, KeyEvent, WindowEvent},
+    keyboard::{KeyCode, PhysicalKey},
+};
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
@@ -164,14 +167,14 @@ impl Camera {
                     KeyCode::ControlLeft => glam::Vec3::new(0.0, -1.0, 0.0),
                     _ => glam::Vec3::ZERO,
                 };
-                
+
                 let driver = self.camera_rig.driver_mut::<YawPitch>();
                 driver.rotate_yaw_pitch(10.0, 0.0);
             }
             _ => {}
         }
     }
-    
+
     pub fn update(&mut self, dt: time::Duration) {
         self.camera_rig.update(dt.as_secs_f32());
     }

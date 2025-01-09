@@ -1,6 +1,7 @@
 use glam::Vec4;
 use wgpu::{
-    core::device, BindGroupDescriptor, BindGroupLayoutDescriptor, MultisampleState, PipelineLayoutDescriptor, TextureFormat
+    core::device, BindGroupDescriptor, BindGroupLayoutDescriptor, MultisampleState,
+    PipelineLayoutDescriptor, TextureFormat,
 };
 
 use crate::{
@@ -79,7 +80,6 @@ impl PBRMaterial {
                         ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                         count: None,
                     },
-                    
                     // Metalic Roughness Texture
                     wgpu::BindGroupLayoutEntry {
                         binding: 2,

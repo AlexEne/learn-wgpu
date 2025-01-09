@@ -69,7 +69,7 @@ impl Model {
                 metalic_factor = pbr_metalic_roughness.metallic_factor();
                 roughness_factor = pbr_metalic_roughness.roughness_factor();
                 base_color_factor = pbr_metalic_roughness.base_color_factor().into();
-                
+
                 break;
             }
         }

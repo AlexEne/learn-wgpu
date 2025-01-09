@@ -545,46 +545,43 @@ pub fn run() -> Result<(), EventLoopError> {
     let mut state = pollster::block_on(State::new(&window));
     let mut last_update = time::Instant::now();
 
-    event_loop.run(move |event, control_flow| {
+    event_loop.run(move |event, control_flow| match event {
+        Event::WindowEvent {
+            ref event,
+            window_id,
+        } if window_id == state.window.id() && !state.input(event) => match event {
+            WindowEvent::CloseRequested
+            | WindowEvent::KeyboardInput {
+                event:
+                    KeyEvent {
+                        state: ElementState::Pressed,
+                        physical_key: PhysicalKey::Code(KeyCode::Escape),
+                        ..
+                    },
+                ..
+            } => control_flow.exit(),
+            WindowEvent::Resized(new_size) => {
+                state.resize(*new_size);
+            }
+            WindowEvent::RedrawRequested => {
+                state.window.request_redraw();
 
-        match event {
-            Event::WindowEvent {
-                ref event,
-                window_id,
-            } if window_id == state.window.id() && !state.input(event) => match event {
-                WindowEvent::CloseRequested
-                | WindowEvent::KeyboardInput {
-                    event:
-                        KeyEvent {
-                            state: ElementState::Pressed,
-                            physical_key: PhysicalKey::Code(KeyCode::Escape),
-                            ..
-                        },
-                    ..
-                } => control_flow.exit(),
-                WindowEvent::Resized(new_size) => {
-                    state.resize(*new_size);
-                }
-                WindowEvent::RedrawRequested => {
-                    state.window.request_redraw();
-                    
-                    let dt = last_update.elapsed();
-                    last_update = time::Instant::now();
-                    state.update(dt);
+                let dt = last_update.elapsed();
+                last_update = time::Instant::now();
+                state.update(dt);
 
-                    match state.render() {
-                        Ok(_) => (),
-                        Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
-                            state.resize(state.size);
-                        }
-                        Err(SurfaceError::OutOfMemory) => control_flow.exit(),
-                        Err(SurfaceError::Timeout) => {}
+                match state.render() {
+                    Ok(_) => (),
+                    Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
+                        state.resize(state.size);
                     }
+                    Err(SurfaceError::OutOfMemory) => control_flow.exit(),
+                    Err(SurfaceError::Timeout) => {}
                 }
-                _ => {}
-            },
+            }
             _ => {}
-        }
+        },
+        _ => {}
     })
 }
 
