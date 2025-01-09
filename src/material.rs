@@ -1,5 +1,6 @@
+use glam::Vec4;
 use wgpu::{
-    core::device, BindGroupDescriptor, MultisampleState, PipelineLayoutDescriptor, TextureFormat,
+    core::device, BindGroupDescriptor, BindGroupLayoutDescriptor, MultisampleState, PipelineLayoutDescriptor, TextureFormat
 };
 
 use crate::{
@@ -9,11 +10,37 @@ use crate::{
 
 pub struct MaterialData {
     pub base_color_texture: Vec<u8>,
+    pub metalic_roughness_texture: Vec<u8>,
+    pub pbr_factors: PBRFactors,
+}
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct PBRFactors {
+    pub base_color_factor: [f32; 4],
+    pub metalic_factor: f32,
+    pub roughness_factor: f32,
+    pub _padding: [f32; 2],
 }
 
 impl MaterialData {
-    pub fn new(base_color_texture: Vec<u8>) -> MaterialData {
-        MaterialData { base_color_texture }
+    pub fn new(
+        base_color_texture: Vec<u8>,
+        metalic_roughness_texture: Vec<u8>,
+        metalic_factor: f32,
+        roughness_factor: f32,
+        base_color_factor: Vec4,
+    ) -> MaterialData {
+        MaterialData {
+            base_color_texture,
+            metalic_roughness_texture,
+            pbr_factors: PBRFactors {
+                metalic_factor,
+                roughness_factor,
+                base_color_factor: base_color_factor.into(),
+                _padding: [0.0; 2],
+            },
+        }
     }
 }
 
@@ -29,6 +56,7 @@ impl PBRMaterial {
         output_format: TextureFormat,
         camera_bind_group_layout: &wgpu::BindGroupLayout,
         light_bind_group_layout: &wgpu::BindGroupLayout,
+        pbr_factors_bind_group_layout: &wgpu::BindGroupLayout,
     ) -> PBRMaterial {
         let textures_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -47,6 +75,24 @@ impl PBRMaterial {
                     },
                     wgpu::BindGroupLayoutEntry {
                         binding: 1,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                        count: None,
+                    },
+                    
+                    // Metalic Roughness Texture
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 2,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            multisampled: false,
+                        },
+                        count: None,
+                    },
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 3,
                         visibility: wgpu::ShaderStages::FRAGMENT,
                         ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                         count: None,
@@ -83,6 +129,7 @@ impl PBRMaterial {
                 &textures_bind_group_layout,
                 camera_bind_group_layout,
                 light_bind_group_layout,
+                pbr_factors_bind_group_layout,
             ],
             push_constant_ranges: &[],
         });
@@ -148,6 +195,7 @@ impl PBRMaterial {
         render_pass.set_bind_group(0, material_instance.textures_bind_group, &[]);
         render_pass.set_bind_group(1, material_instance.camera_bind_group, &[]);
         render_pass.set_bind_group(2, material_instance.light_bind_group, &[]);
+        render_pass.set_bind_group(3, material_instance.pbr_factors_bind_group, &[]);
 
         let model_gpu_data = &model_gpu_instanced.model_gpu_data;
         let index_buffer = &model_gpu_data.index_buffer;
@@ -173,4 +221,5 @@ pub struct PBRMaterialInstance<'a> {
     pub textures_bind_group: &'a wgpu::BindGroup,
     pub camera_bind_group: &'a wgpu::BindGroup,
     pub light_bind_group: &'a wgpu::BindGroup,
+    pub pbr_factors_bind_group: &'a wgpu::BindGroup,
 }

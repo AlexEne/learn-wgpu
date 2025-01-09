@@ -16,5 +16,6 @@ image = { version = "0.24", features = [
 ], default-features = false }
 anyhow = "1.0.94"
 shaderc = "0.8.3"
-glam = "0.29.2"
+glam = {version="0.29.2", features = ["mint"] }
 gltf = "1.4.1"
+dolly = "0.6.0"

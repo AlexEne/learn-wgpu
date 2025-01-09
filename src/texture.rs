@@ -12,16 +12,18 @@ impl Texture {
     pub fn from_bytes(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
+        format: wgpu::TextureFormat,
         bytes: &[u8],
         label: &str,
     ) -> Result<Texture> {
         let img = image::load_from_memory(bytes)?;
-        Texture::from_image(device, queue, &img, Some(label))
+        Texture::from_image(device, queue, format, &img, Some(label))
     }
 
     pub fn from_image(
         device: &wgpu::Device,
         queue: &wgpu::Queue,
+        format: wgpu::TextureFormat,
         img: &image::DynamicImage,
         label: Option<&str>,
     ) -> Result<Texture> {
@@ -40,7 +42,7 @@ impl Texture {
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8UnormSrgb,
+            format: format,
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
             view_formats: &[],
         });

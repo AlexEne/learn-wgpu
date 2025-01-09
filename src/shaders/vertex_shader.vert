@@ -7,9 +7,11 @@ layout(location = 2) in vec2 tex_coords;
 layout(location = 0) out vec2 v_tex_coords;
 layout(location = 1) out vec3 v_normal;
 layout(location = 2) out vec3 v_position;
+layout(location = 3) out vec3 v_camera_pos;
 
 layout(set = 1, binding = 0) uniform Camera {
     mat4 camera_mat;
+    vec4 cam_pos;
 };
 
 layout(location = 5) in vec4 x_axis;
@@ -25,5 +27,6 @@ void main()
     gl_Position = camera_mat * pos;
     v_tex_coords = tex_coords;
     v_normal = normalize((object_mtx * vec4(normal, 1.0)).xyz);
+    v_camera_pos = cam_pos.xyz;
 }
 

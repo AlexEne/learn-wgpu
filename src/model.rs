@@ -1,4 +1,5 @@
 use crate::material::MaterialData;
+use glam::Vec4;
 use gltf::mesh::util::indices;
 use wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
@@ -29,6 +30,10 @@ impl Model {
         let mut vertices = vec![];
         let mut indices = vec![];
         let mut base_color_texture = vec![];
+        let mut metalic_roughness_texture = vec![];
+        let mut metalic_factor = 0.0;
+        let mut roughness_factor = 0.0;
+        let mut base_color_factor = Vec4::ZERO;
 
         for mesh in document.meshes() {
             for primitive in mesh.primitives() {
@@ -52,24 +57,19 @@ impl Model {
                 indices = reader.read_indices().unwrap().into_u32().collect();
 
                 let primitive_material = primitive.material();
-                let base_texture = primitive_material
-                    .pbr_metallic_roughness()
-                    .base_color_texture()
-                    .unwrap();
-                let source = base_texture.texture().source().source();
 
-                match source {
-                    gltf::image::Source::View { view, .. } => {
-                        let buffer = &buffers[view.buffer().index()];
-                        let start = view.offset();
-                        let end = start + view.length();
-                        base_color_texture = buffer[start..end].to_vec();
-                    }
-                    _ => {
-                        panic!("Unsupported texture source (URI)");
-                    }
-                }
+                let pbr_metalic_roughness = primitive_material.pbr_metallic_roughness();
+                let base_texture = pbr_metalic_roughness.base_color_texture().unwrap();
+                base_color_texture = get_texture(&buffers, base_texture);
 
+                let pbr_metalic_roughness_texture =
+                    pbr_metalic_roughness.metallic_roughness_texture().unwrap();
+                metalic_roughness_texture = get_texture(&buffers, pbr_metalic_roughness_texture);
+
+                metalic_factor = pbr_metalic_roughness.metallic_factor();
+                roughness_factor = pbr_metalic_roughness.roughness_factor();
+                base_color_factor = pbr_metalic_roughness.base_color_factor().into();
+                
                 break;
             }
         }
@@ -77,7 +77,13 @@ impl Model {
         Model {
             vertices,
             indices,
-            material: MaterialData::new(base_color_texture),
+            material: MaterialData::new(
+                base_color_texture,
+                metalic_roughness_texture,
+                metalic_factor,
+                roughness_factor,
+                base_color_factor,
+            ),
         }
     }
 
@@ -106,6 +112,25 @@ impl Model {
                 num_indices: self.indices.len() as _,
                 index_buffer_format: wgpu::IndexFormat::Uint32, // Wasteful for now
             },
+        }
+    }
+}
+
+fn get_texture(
+    buffers: &Vec<gltf::buffer::Data>,
+    base_texture: gltf::texture::Info<'_>,
+) -> Vec<u8> {
+    let source = base_texture.texture().source().source();
+
+    match source {
+        gltf::image::Source::View { view, .. } => {
+            let buffer = &*buffers[view.buffer().index()];
+            let start = view.offset();
+            let end = start + view.length();
+            return buffer[start..end].to_vec();
+        }
+        _ => {
+            panic!("Unsupported texture source (URI)");
         }
     }
 }

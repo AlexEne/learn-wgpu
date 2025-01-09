@@ -3,7 +3,7 @@ mod material;
 mod model;
 mod shader_compiler;
 mod texture;
-use std::borrow::Cow;
+use std::{borrow::Cow, time};
 
 use camera::{Camera, CameraGraphicsObject};
 use glam::{Quat, Vec3};
@@ -13,10 +13,10 @@ use material::{PBRMaterial, PBRMaterialInstance};
 use model::{Model, ModelGPUData, ModelGPUDataInstanced};
 use wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
-    BindGroupLayoutDescriptor, BindGroupLayoutEntry, BindingType, Color, CommandEncoderDescriptor,
-    Features, InstanceDescriptor, Limits, MemoryHints, RenderPassColorAttachment,
-    RenderPassDescriptor, ShaderStages, SurfaceError, TextureViewDescriptor, VertexAttribute,
-    VertexBufferLayout,
+    BindGroupDescriptor, BindGroupLayoutDescriptor, BindGroupLayoutEntry, BindingType, Color,
+    CommandEncoderDescriptor, Features, InstanceDescriptor, Limits, MemoryHints,
+    RenderPassColorAttachment, RenderPassDescriptor, ShaderStages, SurfaceError,
+    TextureViewDescriptor, VertexAttribute, VertexBufferLayout,
 };
 use winit::{
     error::EventLoopError,
@@ -39,11 +39,11 @@ struct State<'a> {
 
     pbr_material: PBRMaterial,
 
-    diffuse_binding_group: wgpu::BindGroup,
-    diffuse_texture: texture::Texture,
+    textures_binding_group: wgpu::BindGroup,
+    base_color: texture::Texture,
+    metalic_roughness: texture::Texture,
 
     camera: Camera,
-    camera_controller: CameraController,
     camera_graphics_object: CameraGraphicsObject,
 
     depth_texture: texture::Texture,
@@ -54,58 +54,13 @@ struct State<'a> {
     light_uniform: LightUniform,
     light_bind_group: wgpu::BindGroup,
 
+    pbr_factors_bind_group: wgpu::BindGroup,
+    pbr_factors_buffer: wgpu::Buffer,
+
     light_model: LightModel,
 
     instances: Vec<Instance>,
     model_gpu_instanced: ModelGPUDataInstanced,
-}
-
-struct CameraController {
-    position: glam::Vec3,
-    speed: f32,
-}
-
-impl CameraController {
-    fn new() -> CameraController {
-        CameraController {
-            position: glam::Vec3::new(0.0, 1.0, 2.0),
-            speed: 0.05,
-        }
-    }
-
-    fn process_event(&mut self, event: &WindowEvent) {
-        match event {
-            WindowEvent::KeyboardInput {
-                event:
-                    KeyEvent {
-                        physical_key: PhysicalKey::Code(keycode),
-                        state,
-                        ..
-                    },
-                ..
-            } => {
-                if state == &ElementState::Released {
-                    return;
-                }
-                let movement = match keycode {
-                    KeyCode::KeyW => glam::Vec3::new(0.0, 0.0, -1.0),
-                    KeyCode::KeyS => glam::Vec3::new(0.0, 0.0, 1.0),
-                    KeyCode::KeyA => glam::Vec3::new(-1.0, 0.0, 0.0),
-                    KeyCode::KeyD => glam::Vec3::new(1.0, 0.0, 0.0),
-                    KeyCode::Space => glam::Vec3::new(0.0, 1.0, 0.0),
-                    KeyCode::ControlLeft => glam::Vec3::new(0.0, -1.0, 0.0),
-                    _ => glam::Vec3::ZERO,
-                };
-
-                self.position += movement * self.speed;
-            }
-            _ => {}
-        }
-    }
-
-    fn update_camera(&self, camera: &mut Camera) {
-        camera.position = self.position;
-    }
 }
 
 struct Instance {
@@ -220,11 +175,21 @@ impl<'a> State<'a> {
 
         let config = State::configure_surface(&surface, &adapter, &device, size);
 
-        let diffuse_texture = texture::Texture::from_bytes(
+        let base_color = texture::Texture::from_bytes(
             &device,
             &queue,
+            wgpu::TextureFormat::Rgba8UnormSrgb,
             &model.material.base_color_texture,
-            "happy-tree.png",
+            "Base Color",
+        )
+        .unwrap();
+
+        let metalic_roughness = texture::Texture::from_bytes(
+            &device,
+            &queue,
+            wgpu::TextureFormat::Rgba8Unorm,
+            &model.material.metalic_roughness_texture,
+            "Metalic Roughness",
         )
         .unwrap();
 
@@ -276,24 +241,63 @@ impl<'a> State<'a> {
             }],
         });
 
+        let pbr_factors_bind_group_layout =
+            device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+                label: Some("PBR Factors bind group layout"),
+                entries: &[wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                }],
+            });
+
+        let pbr_factors_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("PBR Factors Buffer"),
+            contents: bytemuck::cast_slice(&[model.material.pbr_factors]),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
+
+        let pbr_factors_bind_group = device.create_bind_group(&BindGroupDescriptor {
+            label: Some("PBR Factors Bind Group"),
+            layout: &pbr_factors_bind_group_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: pbr_factors_buffer.as_entire_binding(),
+            }],
+        });
+
         let pbr_material = material::PBRMaterial::new(
             &device,
             config.format,
             &camera_graphics_object.bind_group_layout,
             &light_bind_group_layout,
+            &pbr_factors_bind_group_layout,
         );
 
-        let diffuse_binding_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        let textures_binding_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("Diffuse Bind Group"),
             layout: &pbr_material.textures_bind_group_layout,
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&diffuse_texture.view),
+                    resource: wgpu::BindingResource::TextureView(&base_color.view),
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&diffuse_texture.sampler),
+                    resource: wgpu::BindingResource::Sampler(&base_color.sampler),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: wgpu::BindingResource::TextureView(&metalic_roughness.view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: wgpu::BindingResource::Sampler(&metalic_roughness.sampler),
                 },
             ],
         });
@@ -311,10 +315,15 @@ impl<'a> State<'a> {
             config,
             size,
             window,
-            diffuse_binding_group,
-            diffuse_texture,
+
+            textures_binding_group,
+            base_color,
+            metalic_roughness,
+
+            pbr_factors_bind_group,
+            pbr_factors_buffer,
+
             camera,
-            camera_controller: CameraController::new(),
             light_buffer,
             light_uniform: light,
             light_bind_group,
@@ -343,12 +352,12 @@ impl<'a> State<'a> {
     }
 
     fn input(&mut self, event: &WindowEvent) -> bool {
-        self.camera_controller.process_event(event);
+        self.camera.process_event(event);
         false
     }
 
-    fn update(&mut self) {
-        self.camera_controller.update_camera(&mut self.camera);
+    fn update(&mut self, dt: time::Duration) {
+        self.camera.update(dt);
         self.camera_graphics_object
             .update(&self.queue, self.camera.build_uniform());
 
@@ -411,9 +420,10 @@ impl<'a> State<'a> {
             self.pbr_material.draw_instanced(
                 &mut render_pass,
                 PBRMaterialInstance {
-                    textures_bind_group: &self.diffuse_binding_group,
+                    textures_bind_group: &self.textures_binding_group,
                     camera_bind_group: &self.camera_graphics_object.bind_group,
                     light_bind_group: &self.light_bind_group,
+                    pbr_factors_bind_group: &self.pbr_factors_bind_group,
                 },
                 &self.model_gpu_instanced,
             );
@@ -533,41 +543,48 @@ pub fn run() -> Result<(), EventLoopError> {
     let window = WindowBuilder::new().build(&event_loop).unwrap();
 
     let mut state = pollster::block_on(State::new(&window));
+    let mut last_update = time::Instant::now();
 
-    event_loop.run(move |event, control_flow| match event {
-        Event::WindowEvent {
-            ref event,
-            window_id,
-        } if window_id == state.window.id() && !state.input(event) => match event {
-            WindowEvent::CloseRequested
-            | WindowEvent::KeyboardInput {
-                event:
-                    KeyEvent {
-                        state: ElementState::Pressed,
-                        physical_key: PhysicalKey::Code(KeyCode::Escape),
-                        ..
-                    },
-                ..
-            } => control_flow.exit(),
-            WindowEvent::Resized(new_size) => {
-                state.resize(*new_size);
-            }
-            WindowEvent::RedrawRequested => {
-                state.window.request_redraw();
-                state.update();
+    event_loop.run(move |event, control_flow| {
 
-                match state.render() {
-                    Ok(_) => (),
-                    Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
-                        state.resize(state.size);
-                    }
-                    Err(SurfaceError::OutOfMemory) => control_flow.exit(),
-                    Err(SurfaceError::Timeout) => {}
+        match event {
+            Event::WindowEvent {
+                ref event,
+                window_id,
+            } if window_id == state.window.id() && !state.input(event) => match event {
+                WindowEvent::CloseRequested
+                | WindowEvent::KeyboardInput {
+                    event:
+                        KeyEvent {
+                            state: ElementState::Pressed,
+                            physical_key: PhysicalKey::Code(KeyCode::Escape),
+                            ..
+                        },
+                    ..
+                } => control_flow.exit(),
+                WindowEvent::Resized(new_size) => {
+                    state.resize(*new_size);
                 }
-            }
+                WindowEvent::RedrawRequested => {
+                    state.window.request_redraw();
+                    
+                    let dt = last_update.elapsed();
+                    last_update = time::Instant::now();
+                    state.update(dt);
+
+                    match state.render() {
+                        Ok(_) => (),
+                        Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
+                            state.resize(state.size);
+                        }
+                        Err(SurfaceError::OutOfMemory) => control_flow.exit(),
+                        Err(SurfaceError::Timeout) => {}
+                    }
+                }
+                _ => {}
+            },
             _ => {}
-        },
-        _ => {}
+        }
     })
 }
 

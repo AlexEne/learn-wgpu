@@ -4,6 +4,7 @@ layout(location = 0) in vec3 position;
 
 layout(set = 0, binding = 0) uniform Camera {
     mat4 camera_mat;
+    vec3 view_dir;
 };
 
 layout(set = 1, binding = 0) uniform Obj {
