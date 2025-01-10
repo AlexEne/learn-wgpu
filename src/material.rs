@@ -1,7 +1,7 @@
 use glam::Vec4;
 use wgpu::{
-    core::device, BindGroupDescriptor, BindGroupLayoutDescriptor, MultisampleState,
-    PipelineLayoutDescriptor, TextureFormat,
+    core::device, include_spirv_raw, BindGroupDescriptor, BindGroupLayoutDescriptor,
+    MultisampleState, PipelineLayoutDescriptor, TextureFormat,
 };
 
 use crate::{
@@ -101,6 +101,7 @@ impl PBRMaterial {
             });
 
         let (vertex_shader, fragment_shader) = shader_compiler::compile_shaders(
+            device,
             shader_compiler::ShaderInput {
                 shader_code: include_str!("shaders/vertex_shader.vert"),
                 file_name: "vertex_shader.vert",
@@ -112,16 +113,6 @@ impl PBRMaterial {
                 entry_point: "main",
             },
         );
-
-        let vertex_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("PBR Material Vertex Shader"),
-            source: wgpu::util::make_spirv(&vertex_shader.as_binary_u8()),
-        });
-
-        let fragment_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("PBR Material Fragment Shader"),
-            source: wgpu::util::make_spirv(&fragment_shader.as_binary_u8()),
-        });
 
         let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
             label: Some("PBR Material Pipeline Layout"),

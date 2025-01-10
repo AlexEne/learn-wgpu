@@ -12,6 +12,7 @@ use light::LightModel;
 use material::{PBRMaterial, PBRMaterialInstance};
 use model::{Model, ModelGPUData, ModelGPUDataInstanced};
 use wgpu::{
+    include_spirv, include_spirv_raw,
     util::{BufferInitDescriptor, DeviceExt},
     BindGroupDescriptor, BindGroupLayoutDescriptor, BindGroupLayoutEntry, BindingType, Color,
     CommandEncoderDescriptor, Features, InstanceDescriptor, Limits, MemoryHints,
@@ -486,55 +487,6 @@ fn create_instances(
         },
         instances,
     )
-}
-
-fn create_shaders(device: &wgpu::Device) -> (wgpu::ShaderModule, wgpu::ShaderModule) {
-    let (vertex_shader, fragment_shader) = shader_compiler::compile_shaders(
-        shader_compiler::ShaderInput {
-            shader_code: include_str!("shaders/vertex_shader.vert"),
-            file_name: "vertex_shader.vert",
-            entry_point: "main",
-        },
-        shader_compiler::ShaderInput {
-            shader_code: include_str!("shaders/fragment.frag"),
-            file_name: "fragment.frag",
-            entry_point: "main",
-        },
-    );
-
-    #[cfg(not(target_os = "macos"))]
-    let (vertex_shader, fragment_shader) = {
-        let vertex_shader = unsafe {
-            device.create_shader_module_spirv(&wgpu::ShaderModuleDescriptorSpirV {
-                label: Some("Vertex Shader"),
-                source: Cow::from(vertex_shader.as_binary()),
-            })
-        };
-        let fragment_shader = unsafe {
-            device.create_shader_module_spirv(&wgpu::ShaderModuleDescriptorSpirV {
-                label: Some("Fragment Shader"),
-                source: Cow::from(fragment_shader.as_binary()),
-            })
-        };
-
-        (vertex_shader, fragment_shader)
-    };
-
-    #[cfg(target_os = "macos")]
-    let (vertex_shader, fragment_shader) = {
-        let vertex_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("Vertex Shader"),
-            source: wgpu::ShaderSource::SpirV(Cow::Borrowed(vertex_shader.as_binary())),
-        });
-
-        let fragment_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("Vertex Shader"),
-            source: wgpu::ShaderSource::SpirV(Cow::Borrowed(fragment_shader.as_binary())),
-        });
-
-        (vertex_shader, fragment_shader)
-    };
-    (vertex_shader, fragment_shader)
 }
 
 pub fn run() -> Result<(), EventLoopError> {

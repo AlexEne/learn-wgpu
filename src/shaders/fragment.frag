@@ -47,35 +47,35 @@ vec4 linear_to_srgb(vec4 color) {
 // }
 
 
-// GGX Normal Distribution Function (NDF)
-// N: Surface normal
-// H: Halfway vector
-// a: Roughness
-float DistributionGGX(vec3 N, vec3 H, float a)
+float DistributionGGX(vec3 N, vec3 H, float roughness)
 {
-    float a2     = a * a;
+    float a      = roughness*roughness;
+    float a2     = a*a;
     float NdotH  = max(dot(N, H), 0.0);
-    float NdotH2 = NdotH * NdotH;
-    
-    float nom    = a2;
-    float denom  = (NdotH2 * (a2 - 1.0) + 1.0);
-    denom        = PI * denom * denom;
-    
-    return nom / denom;
+    float NdotH2 = NdotH*NdotH;
+	
+    float num   = a2;
+    float denom = (NdotH2 * (a2 - 1.0) + 1.0);
+    denom = PI * denom * denom;
+	
+    return num / denom;
 }
 
-float GeometrySchlickGGX(float NdotV, float k)
+float GeometrySchlickGGX(float NdotV, float roughness)
 {
-    float nom   = NdotV;
+    float r = (roughness + 1.0);
+    float k = (r*r) / 8.0;
+
+    float num   = NdotV;
     float denom = NdotV * (1.0 - k) + k;
 	
-    return nom / denom;
+    return num / denom;
 }
-  
-float GeometrySmith(float NdotV, float NdotL, float k)
+
+float GeometrySmith(float NdotV, float NdotL, float roughness)
 {
-    float ggx1 = GeometrySchlickGGX(NdotV, k);
-    float ggx2 = GeometrySchlickGGX(NdotL, k);
+    float ggx2  = GeometrySchlickGGX(NdotV, roughness);
+    float ggx1  = GeometrySchlickGGX(NdotL, roughness);
 	
     return ggx1 * ggx2;
 }
@@ -90,8 +90,9 @@ void main()
     vec3 N = normalize(v_normal);
     vec3 V = normalize(v_camera_pos - v_world_position);
     vec3 L = normalize(light.position - v_world_position);
+    float NdotV1 = dot(N, V);
     float NdotL = max(dot(N, L), 0.0);     
-    float NdotV = max(dot(N, V), 0.0);
+    float NdotV = max(NdotV1, 0.0);
     
     vec3 albedo = texture(sampler2D(t_texture, s_diffuse), v_tex_coords).rgb * pbr.base_color_factor.rgb;
     albedo = pow(albedo, vec3(2.2));
@@ -105,7 +106,7 @@ void main()
 
     // calculate per-light radiance
     vec3 H = normalize(V + L);
-    float distance = length(L);
+    float distance = length(light.position - v_world_position);
     float attenuation = 1.0 / (distance * distance);
     vec3 radiance = light.color.rgb * attenuation;        
     
@@ -119,7 +120,6 @@ void main()
     kD *= 1.0 - metallic;	  
     
     vec3 numerator = NDF * G * F;
-    
     float denominator = 4.0 * max(dot(N, V), 0.0) * NdotL + 0.0001;
     vec3 specular = numerator / denominator;  
         

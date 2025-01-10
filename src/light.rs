@@ -37,6 +37,7 @@ impl LightModel {
         config: &SurfaceConfiguration,
     ) -> LightModel {
         let (vertex_shader, fragment_shader) = compile_shaders(
+            device,
             shader_compiler::ShaderInput {
                 shader_code: include_str!("shaders/light.vert"),
                 entry_point: "main",
@@ -48,16 +49,6 @@ impl LightModel {
                 file_name: "light.frag",
             },
         );
-
-        let vertex_shader_module = device.create_shader_module(ShaderModuleDescriptor {
-            label: Some("Light Vertex Shader"),
-            source: wgpu::util::make_spirv(&vertex_shader.as_binary_u8()),
-        });
-
-        let fragment_shader_module = device.create_shader_module(ShaderModuleDescriptor {
-            label: Some("Light Fragment Shader"),
-            source: wgpu::util::make_spirv(&fragment_shader.as_binary_u8()),
-        });
 
         let object_transform_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -96,8 +87,8 @@ impl LightModel {
             &device,
             &camera_group_layout,
             &object_transform_bind_group_layout,
-            &vertex_shader_module,
-            &fragment_shader_module,
+            &vertex_shader,
+            &fragment_shader,
             &config,
         );
 
@@ -152,8 +143,8 @@ impl LightModel {
             vertices,
             indices,
             pipeline,
-            vertex_shader: vertex_shader_module,
-            fragment_shader: fragment_shader_module,
+            vertex_shader,
+            fragment_shader,
             vertex_buffer,
             index_buffer,
             position,
