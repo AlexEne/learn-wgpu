@@ -6,7 +6,7 @@ layout(location = 2) in vec2 tex_coords;
 
 layout(location = 0) out vec2 v_tex_coords;
 layout(location = 1) out vec3 v_normal;
-layout(location = 2) out vec3 v_position;
+layout(location = 2) out vec3 v_world_position;
 layout(location = 3) out vec3 v_camera_pos;
 
 layout(set = 1, binding = 0) uniform Camera {
@@ -23,7 +23,7 @@ void main()
 {
     mat4 object_mtx = mat4(x_axis, y_axis, z_axis, w_axis);
     vec4 pos = object_mtx * vec4(position, 1.0);
-    v_position = pos.xyz;
+    v_world_position = pos.xyz;
     // v_position.z = -v_position.z;
     gl_Position = camera_mat * pos;
     v_tex_coords = tex_coords;

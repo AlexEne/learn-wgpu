@@ -195,9 +195,8 @@ impl<'a> State<'a> {
         .unwrap();
 
         let camera = Camera::new(
-            glam::Vec3::new(0.0, 1.0, 2.0),
+            glam::Vec3::new(0.0, 0.5, 2.0),
             glam::Vec3::new(0.0, 0.0, 0.0),
-            glam::Vec3::Y,
             45.0_f32.to_radians(),
             config.width as f32 / config.height as f32,
             0.1,

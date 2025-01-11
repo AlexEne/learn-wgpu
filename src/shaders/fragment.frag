@@ -98,8 +98,8 @@ void main()
     albedo = pow(albedo, vec3(2.2));
     
     vec4 metallic_roughness = texture(sampler2D(t_metalic_roughness, s_metalic_roughness), v_tex_coords);
-    float metallic = metallic_roughness.b * pbr.metallic_factor;
-    float roughness = metallic_roughness.g * pbr.roughness_factor;
+    float metallic = metallic_roughness.b; //* pbr.metallic_factor;
+    float roughness = metallic_roughness.g;// * pbr.roughness_factor;
 
     vec3 F0 = vec3(0.04); 
     F0 = mix(F0, albedo, metallic);
@@ -134,6 +134,6 @@ void main()
     color = pow(color, vec3(1.0/2.2));  
 
     out_color = vec4(color, 1.0);
-    // out_color = vec4(v_world_position, 1.0);
+    // out_color = vec4(vec3(v_world_position.z), 1.0);
 }
 
