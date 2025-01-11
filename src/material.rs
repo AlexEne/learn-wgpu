@@ -1,6 +1,5 @@
 use glam::Vec4;
 use wgpu::{
-    core::device, include_spirv_raw, BindGroupDescriptor, BindGroupLayoutDescriptor,
     MultisampleState, PipelineLayoutDescriptor, TextureFormat,
 };
 

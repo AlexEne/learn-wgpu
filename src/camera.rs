@@ -3,13 +3,9 @@ use std::time;
 use bytemuck;
 use dolly::prelude::*;
 use glam::{Mat4, Quat, Vec3, Vec4};
-use gltf::{
-    animation::Target,
-    camera::{self, Projection},
-};
 use wgpu::{
-    util::{BufferInitDescriptor, DeviceExt},
-    Buffer, BufferDescriptor, Device,
+    util::DeviceExt,
+    Buffer,
 };
 use winit::{
     event::{ElementState, KeyEvent, WindowEvent},

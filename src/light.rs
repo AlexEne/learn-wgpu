@@ -1,8 +1,6 @@
 use glam::Vec3;
-use gltf::{camera, Buffer};
 use wgpu::{
-    util::{BufferInitDescriptor, DeviceExt},
-    ShaderModuleDescriptor, SurfaceConfiguration,
+    util::{BufferInitDescriptor, DeviceExt}, SurfaceConfiguration,
 };
 
 use crate::{

@@ -3,7 +3,7 @@ mod material;
 mod model;
 mod shader_compiler;
 mod texture;
-use std::{borrow::Cow, time};
+use std::time;
 
 use camera::{Camera, CameraGraphicsObject};
 use glam::{Quat, Vec3};
@@ -12,7 +12,6 @@ use light::LightModel;
 use material::{PBRMaterial, PBRMaterialInstance};
 use model::{Model, ModelGPUData, ModelGPUDataInstanced};
 use wgpu::{
-    include_spirv, include_spirv_raw,
     util::{BufferInitDescriptor, DeviceExt},
     BindGroupDescriptor, BindGroupLayoutDescriptor, BindGroupLayoutEntry, BindingType, Color,
     CommandEncoderDescriptor, Features, InstanceDescriptor, Limits, MemoryHints,

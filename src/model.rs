@@ -1,6 +1,5 @@
 use crate::material::MaterialData;
 use glam::Vec4;
-use gltf::mesh::util::indices;
 use wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
     VertexAttribute, VertexBufferLayout,
