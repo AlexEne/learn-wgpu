@@ -24,6 +24,7 @@ void main()
     mat4 object_mtx = mat4(x_axis, y_axis, z_axis, w_axis);
     vec4 pos = object_mtx * vec4(position, 1.0);
     v_position = pos.xyz;
+    // v_position.z = -v_position.z;
     gl_Position = camera_mat * pos;
     v_tex_coords = tex_coords;
     v_normal = normalize((object_mtx * vec4(normal, 1.0)).xyz);
