@@ -1,16 +1,17 @@
 use glam::Vec4;
-use wgpu::{
-    MultisampleState, PipelineLayoutDescriptor, TextureFormat,
-};
+use wgpu::{MultisampleState, PipelineLayoutDescriptor, TextureFormat};
 
 use crate::{
     model::{ModelGPUDataInstanced, ModelVertex, Vertex},
     shader_compiler, Instance,
 };
 
+#[derive(Clone, Copy, Debug)]
+pub struct TextureID(pub usize);
+
 pub struct MaterialData {
-    pub base_color_texture: Vec<u8>,
-    pub metalic_roughness_texture: Vec<u8>,
+    pub base_color_texture: TextureID,
+    pub metalic_roughness_texture: TextureID,
     pub pbr_factors: PBRFactors,
 }
 
@@ -25,8 +26,8 @@ pub struct PBRFactors {
 
 impl MaterialData {
     pub fn new(
-        base_color_texture: Vec<u8>,
-        metalic_roughness_texture: Vec<u8>,
+        base_color_texture: TextureID,
+        metalic_roughness_texture: TextureID,
         metalic_factor: f32,
         roughness_factor: f32,
         base_color_factor: Vec4,

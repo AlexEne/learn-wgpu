@@ -1,6 +1,7 @@
 use glam::Vec3;
 use wgpu::{
-    util::{BufferInitDescriptor, DeviceExt}, SurfaceConfiguration,
+    util::{BufferInitDescriptor, DeviceExt},
+    SurfaceConfiguration,
 };
 
 use crate::{

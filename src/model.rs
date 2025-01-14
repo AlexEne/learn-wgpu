@@ -1,5 +1,9 @@
-use crate::material::MaterialData;
+use crate::{
+    material::{MaterialData, TextureID},
+    texture::Texture,
+};
 use glam::Vec4;
+use std::collections::HashMap;
 use wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
     VertexAttribute, VertexBufferLayout,
@@ -24,18 +28,21 @@ pub struct Model {
 }
 
 impl Model {
-    pub fn from_gltf(path: &str) -> Model {
+    pub fn from_gltf(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        path: &str,
+        textures: &mut Vec<Texture>,
+    ) -> Vec<Model> {
         let (document, buffers, _images) = gltf::import(path).unwrap();
-        let mut vertices = vec![];
-        let mut indices = vec![];
-        let mut base_color_texture = vec![];
-        let mut metalic_roughness_texture = vec![];
-        let mut metalic_factor = 0.0;
-        let mut roughness_factor = 0.0;
-        let mut base_color_factor = Vec4::ZERO;
+
+        let mut texture_map = HashMap::new(); // Map gltf ids to texture ids
+        let mut models = Vec::new();
 
         for mesh in document.meshes() {
-            for primitive in mesh.primitives() {
+            for (idx, primitive) in mesh.primitives().enumerate() {
+                let mut vertices = vec![];
+
                 let reader = primitive.reader(|buffer| Some(&buffers[buffer.index()]));
 
                 let positions = reader.read_positions().unwrap();
@@ -53,37 +60,85 @@ impl Model {
                     vertices.push(vertex);
                 }
 
-                indices = reader.read_indices().unwrap().into_u32().collect();
+                let indices = reader.read_indices().unwrap().into_u32().collect();
 
                 let primitive_material = primitive.material();
 
                 let pbr_metalic_roughness = primitive_material.pbr_metallic_roughness();
                 let base_texture = pbr_metalic_roughness.base_color_texture().unwrap();
-                base_color_texture = get_texture(&buffers, base_texture);
 
-                let pbr_metalic_roughness_texture =
-                    pbr_metalic_roughness.metallic_roughness_texture().unwrap();
-                metalic_roughness_texture = get_texture(&buffers, pbr_metalic_roughness_texture);
+                let base_texture_id = base_texture.texture().source().index();
 
-                metalic_factor = pbr_metalic_roughness.metallic_factor();
-                roughness_factor = pbr_metalic_roughness.roughness_factor();
-                base_color_factor = pbr_metalic_roughness.base_color_factor().into();
+                let base_color_texture =
+                    if let Some(base_color_texture_id) = texture_map.get(&base_texture_id) {
+                        *base_color_texture_id
+                    } else {
+                        let base_color_texture = get_texture(&buffers, base_texture);
+                        let texture = Texture::from_bytes(
+                            device,
+                            queue,
+                            wgpu::TextureFormat::Rgba8UnormSrgb,
+                            &base_color_texture,
+                            &format!("base_color_texture {:?}", idx),
+                        )
+                        .unwrap();
 
-                break;
+                        textures.push(texture);
+                        let id = textures.len() - 1;
+                        texture_map.insert(base_texture_id, TextureID(id));
+                        TextureID(id)
+                    };
+
+                let metalid_roughness_texture_id = pbr_metalic_roughness
+                    .metallic_roughness_texture()
+                    .unwrap()
+                    .texture()
+                    .source()
+                    .index();
+
+                let metalic_roughness_texture = if let Some(metalic_roughness_texture_id) =
+                    texture_map.get(&metalid_roughness_texture_id)
+                {
+                    *metalic_roughness_texture_id
+                } else {
+                    let metalic_roughness_texture = get_texture(
+                        &buffers,
+                        pbr_metalic_roughness.metallic_roughness_texture().unwrap(),
+                    );
+                    let texture = Texture::from_bytes(
+                        device,
+                        queue,
+                        wgpu::TextureFormat::Rgba8UnormSrgb,
+                        &metalic_roughness_texture,
+                        &format!("metallic_roughness_texture {:?}", idx),
+                    )
+                    .unwrap();
+
+                    textures.push(texture);
+                    let id = textures.len() - 1;
+                    texture_map.insert(metalid_roughness_texture_id, TextureID(id));
+                    TextureID(id)
+                };
+
+                let metalic_factor = pbr_metalic_roughness.metallic_factor();
+                let roughness_factor = pbr_metalic_roughness.roughness_factor();
+                let base_color_factor = pbr_metalic_roughness.base_color_factor().into();
+
+                models.push(Model {
+                    vertices,
+                    indices,
+                    material: MaterialData::new(
+                        base_color_texture,
+                        metalic_roughness_texture,
+                        metalic_factor,
+                        roughness_factor,
+                        base_color_factor,
+                    ),
+                });
             }
         }
 
-        Model {
-            vertices,
-            indices,
-            material: MaterialData::new(
-                base_color_texture,
-                metalic_roughness_texture,
-                metalic_factor,
-                roughness_factor,
-                base_color_factor,
-            ),
-        }
+        models
     }
 
     fn create_buffers(&self, device: &wgpu::Device) -> (wgpu::Buffer, wgpu::Buffer) {

@@ -40,15 +40,13 @@ struct State<'a> {
     pbr_material: PBRMaterial,
 
     textures_binding_group: wgpu::BindGroup,
-    base_color: texture::Texture,
-    metalic_roughness: texture::Texture,
 
     camera: Camera,
     camera_graphics_object: CameraGraphicsObject,
 
     depth_texture: texture::Texture,
 
-    model: Model,
+    models: Vec<Model>,
 
     light_buffer: wgpu::Buffer,
     light_uniform: LightUniform,
@@ -58,7 +56,12 @@ struct State<'a> {
     pbr_factors_buffer: wgpu::Buffer,
 
     light_model: LightModel,
+    models_instanced: Vec<InstancedModel>,
 
+    textures: Vec<texture::Texture>,
+}
+
+struct InstancedModel {
     instances: Vec<Instance>,
     model_gpu_instanced: ModelGPUDataInstanced,
 }
@@ -137,7 +140,7 @@ impl<'a> State<'a> {
     async fn new(window: &'a Window) -> State<'a> {
         let size = window.inner_size();
 
-        let model = Model::from_gltf("data/Avocado.glb");
+        let mut textures = Vec::new();
 
         let instance = wgpu::Instance::new(InstanceDescriptor {
             backends: wgpu::Backends::PRIMARY,
@@ -173,25 +176,9 @@ impl<'a> State<'a> {
             .await
             .unwrap();
 
+        let models = Model::from_gltf(&device, &queue, "data/Avocado.glb", &mut textures);
+
         let config = State::configure_surface(&surface, &adapter, &device, size);
-
-        let base_color = texture::Texture::from_bytes(
-            &device,
-            &queue,
-            wgpu::TextureFormat::Rgba8UnormSrgb,
-            &model.material.base_color_texture,
-            "Base Color",
-        )
-        .unwrap();
-
-        let metalic_roughness = texture::Texture::from_bytes(
-            &device,
-            &queue,
-            wgpu::TextureFormat::Rgba8Unorm,
-            &model.material.metalic_roughness_texture,
-            "Metalic Roughness",
-        )
-        .unwrap();
 
         let camera = Camera::new(
             glam::Vec3::new(0.0, 0.5, 2.0),
@@ -257,7 +244,7 @@ impl<'a> State<'a> {
 
         let pbr_factors_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("PBR Factors Buffer"),
-            contents: bytemuck::cast_slice(&[model.material.pbr_factors]),
+            contents: bytemuck::cast_slice(&[models[0].material.pbr_factors]),
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
 
@@ -278,6 +265,8 @@ impl<'a> State<'a> {
             &pbr_factors_bind_group_layout,
         );
 
+        let base_color = &textures[models[0].material.base_color_texture.0];
+        let metalic_roughness = &textures[models[0].material.metalic_roughness_texture.0];
         let textures_binding_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("Diffuse Bind Group"),
             layout: &pbr_material.textures_bind_group_layout,
@@ -303,8 +292,18 @@ impl<'a> State<'a> {
 
         let depth_texture = texture::Texture::create_depth_texture(&device, &config);
 
-        let (model_gpu_instanced, instances) =
-            create_instances(&device, model.create_gpu_data(&device));
+        let mut models_instanced = Vec::new();
+        for model in &models {
+            let (model_gpu_instanced, instances) =
+                create_instances(&device, model.create_gpu_data(&device));
+
+            let instanced_model = InstancedModel {
+                instances,
+                model_gpu_instanced,
+            };
+
+            models_instanced.push(instanced_model);
+        }
 
         State {
             pbr_material,
@@ -316,8 +315,6 @@ impl<'a> State<'a> {
             window,
 
             textures_binding_group,
-            base_color,
-            metalic_roughness,
 
             pbr_factors_bind_group,
             pbr_factors_buffer,
@@ -327,12 +324,13 @@ impl<'a> State<'a> {
             light_uniform: light,
             light_bind_group,
             depth_texture,
-            model,
+            models,
             light_model,
             camera_graphics_object,
 
-            instances,
-            model_gpu_instanced,
+            models_instanced,
+
+            textures,
         }
     }
 
@@ -360,17 +358,22 @@ impl<'a> State<'a> {
         self.camera_graphics_object
             .update(&self.queue, self.camera.build_uniform());
 
-        for instance in self.instances.iter_mut() {
-            instance.rotation *= Quat::from_rotation_y(0.02);
-        }
+        for instanced_model in self.models_instanced.iter_mut() {
+            for instance in instanced_model.instances.iter_mut() {
+                instance.rotation *= Quat::from_rotation_y(0.02);
+            }
 
-        let instances_data: Vec<InstanceRaw> =
-            self.instances.iter().map(Instance::to_raw).collect();
-        self.queue.write_buffer(
-            &self.model_gpu_instanced.instance_buffer,
-            0,
-            bytemuck::cast_slice(&instances_data),
-        );
+            let instances_data: Vec<InstanceRaw> = instanced_model
+                .instances
+                .iter()
+                .map(Instance::to_raw)
+                .collect();
+            self.queue.write_buffer(
+                &instanced_model.model_gpu_instanced.instance_buffer,
+                0,
+                bytemuck::cast_slice(&instances_data),
+            );
+        }
     }
 
     fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
@@ -416,16 +419,18 @@ impl<'a> State<'a> {
                 timestamp_writes: None,
             });
 
-            self.pbr_material.draw_instanced(
-                &mut render_pass,
-                PBRMaterialInstance {
-                    textures_bind_group: &self.textures_binding_group,
-                    camera_bind_group: &self.camera_graphics_object.bind_group,
-                    light_bind_group: &self.light_bind_group,
-                    pbr_factors_bind_group: &self.pbr_factors_bind_group,
-                },
-                &self.model_gpu_instanced,
-            );
+            for instanced_model in self.models_instanced.iter() {
+                self.pbr_material.draw_instanced(
+                    &mut render_pass,
+                    PBRMaterialInstance {
+                        textures_bind_group: &self.textures_binding_group,
+                        camera_bind_group: &self.camera_graphics_object.bind_group,
+                        light_bind_group: &self.light_bind_group,
+                        pbr_factors_bind_group: &self.pbr_factors_bind_group,
+                    },
+                    &instanced_model.model_gpu_instanced,
+                );
+            }
 
             self.light_model
                 .render(&mut render_pass, &self.camera_graphics_object.bind_group);

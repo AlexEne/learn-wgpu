@@ -3,10 +3,7 @@ use std::time;
 use bytemuck;
 use dolly::prelude::*;
 use glam::{Mat4, Quat, Vec3, Vec4};
-use wgpu::{
-    util::DeviceExt,
-    Buffer,
-};
+use wgpu::{util::DeviceExt, Buffer};
 use winit::{
     event::{ElementState, KeyEvent, WindowEvent},
     keyboard::{KeyCode, PhysicalKey},
@@ -109,16 +106,10 @@ impl Camera {
         let transform = self.camera_rig.final_transform;
         let position: Vec3 = transform.position.into();
         let rotation: Quat = transform.rotation.into();
-        // let view = glam::Mat4::look_at_rh(
-        //     transform.position.into(),
-        //     transform.forward::<Vec3>(),
-        //     transform.up::<Vec3>(),
-        // );
 
         // Calculate the forward, right, and up vectors from the rotation
         let forward = rotation * Vec3::new(0.0, 0.0, -1.0);
         let up = rotation * Vec3::new(0.0, 1.0, 0.0);
-        let right = rotation * Vec3::new(1.0, 0.0, 0.0);
 
         // Construct the view matrix
         let view = Mat4::look_at_rh(position, position + forward, up);
