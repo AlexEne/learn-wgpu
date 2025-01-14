@@ -39,8 +39,6 @@ struct State<'a> {
 
     pbr_material: PBRMaterial,
 
-    textures_binding_group: wgpu::BindGroup,
-
     camera: Camera,
     camera_graphics_object: CameraGraphicsObject,
 
@@ -52,9 +50,6 @@ struct State<'a> {
     light_uniform: LightUniform,
     light_bind_group: wgpu::BindGroup,
 
-    pbr_factors_bind_group: wgpu::BindGroup,
-    pbr_factors_buffer: wgpu::Buffer,
-
     light_model: LightModel,
     models_instanced: Vec<InstancedModel>,
 
@@ -64,6 +59,10 @@ struct State<'a> {
 struct InstancedModel {
     instances: Vec<Instance>,
     model_gpu_instanced: ModelGPUDataInstanced,
+
+    textures_binding_group: wgpu::BindGroup,
+    pbr_factors_bind_group: wgpu::BindGroup,
+    pbr_factors_buffer: wgpu::Buffer,
 }
 
 struct Instance {
@@ -242,21 +241,6 @@ impl<'a> State<'a> {
                 }],
             });
 
-        let pbr_factors_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("PBR Factors Buffer"),
-            contents: bytemuck::cast_slice(&[models[0].material.pbr_factors]),
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-        });
-
-        let pbr_factors_bind_group = device.create_bind_group(&BindGroupDescriptor {
-            label: Some("PBR Factors Bind Group"),
-            layout: &pbr_factors_bind_group_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: pbr_factors_buffer.as_entire_binding(),
-            }],
-        });
-
         let pbr_material = material::PBRMaterial::new(
             &device,
             config.format,
@@ -265,45 +249,63 @@ impl<'a> State<'a> {
             &pbr_factors_bind_group_layout,
         );
 
-        let base_color = &textures[models[0].material.base_color_texture.0];
-        let metalic_roughness = &textures[models[0].material.metalic_roughness_texture.0];
-        let textures_binding_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("Diffuse Bind Group"),
-            layout: &pbr_material.textures_bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&base_color.view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&base_color.sampler),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: wgpu::BindingResource::TextureView(&metalic_roughness.view),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 3,
-                    resource: wgpu::BindingResource::Sampler(&metalic_roughness.sampler),
-                },
-            ],
-        });
-
-        let depth_texture = texture::Texture::create_depth_texture(&device, &config);
-
         let mut models_instanced = Vec::new();
         for model in &models {
+            let pbr_factors_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("PBR Factors Buffer"),
+                contents: bytemuck::cast_slice(&[model.material.pbr_factors]),
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            });
+
+            let pbr_factors_bind_group = device.create_bind_group(&BindGroupDescriptor {
+                label: Some("PBR Factors Bind Group"),
+                layout: &pbr_factors_bind_group_layout,
+                entries: &[wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: pbr_factors_buffer.as_entire_binding(),
+                }],
+            });
+
+            let base_color = &textures[model.material.base_color_texture.0];
+            let metalic_roughness = &textures[model.material.metalic_roughness_texture.0];
+            let textures_binding_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("Diffuse Bind Group"),
+                layout: &pbr_material.textures_bind_group_layout,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::TextureView(&base_color.view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::Sampler(&base_color.sampler),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: wgpu::BindingResource::TextureView(&metalic_roughness.view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 3,
+                        resource: wgpu::BindingResource::Sampler(&metalic_roughness.sampler),
+                    },
+                ],
+            });
+
             let (model_gpu_instanced, instances) =
                 create_instances(&device, model.create_gpu_data(&device));
 
             let instanced_model = InstancedModel {
                 instances,
                 model_gpu_instanced,
+                textures_binding_group,
+                pbr_factors_bind_group,
+                pbr_factors_buffer,
             };
 
             models_instanced.push(instanced_model);
         }
+
+        let depth_texture = texture::Texture::create_depth_texture(&device, &config);
 
         State {
             pbr_material,
@@ -313,11 +315,6 @@ impl<'a> State<'a> {
             config,
             size,
             window,
-
-            textures_binding_group,
-
-            pbr_factors_bind_group,
-            pbr_factors_buffer,
 
             camera,
             light_buffer,
@@ -332,10 +329,6 @@ impl<'a> State<'a> {
 
             textures,
         }
-    }
-
-    pub fn window(&self) -> &Window {
-        &self.window
     }
 
     fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
@@ -423,10 +416,10 @@ impl<'a> State<'a> {
                 self.pbr_material.draw_instanced(
                     &mut render_pass,
                     PBRMaterialInstance {
-                        textures_bind_group: &self.textures_binding_group,
+                        textures_bind_group: &instanced_model.textures_binding_group,
                         camera_bind_group: &self.camera_graphics_object.bind_group,
                         light_bind_group: &self.light_bind_group,
-                        pbr_factors_bind_group: &self.pbr_factors_bind_group,
+                        pbr_factors_bind_group: &instanced_model.pbr_factors_bind_group,
                     },
                     &instanced_model.model_gpu_instanced,
                 );
@@ -448,11 +441,6 @@ fn create_instances(
     model_data: ModelGPUData,
 ) -> (ModelGPUDataInstanced, Vec<Instance>) {
     const INSTANCES_PER_ROW: u32 = 10;
-    const INSTANCE_DISPLACEMENT: Vec3 = Vec3::new(
-        INSTANCES_PER_ROW as f32 * 0.5,
-        0.0,
-        INSTANCES_PER_ROW as f32 * 0.5,
-    );
 
     let instances: Vec<Instance> = (0..INSTANCES_PER_ROW)
         .flat_map(|z| {
