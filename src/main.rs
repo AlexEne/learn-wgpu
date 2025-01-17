@@ -9,7 +9,7 @@ use camera::{Camera, CameraGraphicsObject};
 use glam::{Quat, Vec3};
 mod light;
 use light::LightModel;
-use material::{PBRMaterial, PBRMaterialInstance};
+use material::{PBRMaterialInstance, PBRMaterialPipeline};
 use model::{Model, ModelGPUData, ModelGPUDataInstanced};
 use wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
@@ -37,7 +37,7 @@ struct State<'a> {
     // unsafe references to the window's resources.
     window: &'a Window,
 
-    pbr_material: PBRMaterial,
+    pbr_material: PBRMaterialPipeline,
 
     camera: Camera,
     camera_graphics_object: CameraGraphicsObject,
@@ -226,27 +226,11 @@ impl<'a> State<'a> {
             }],
         });
 
-        let pbr_factors_bind_group_layout =
-            device.create_bind_group_layout(&BindGroupLayoutDescriptor {
-                label: Some("PBR Factors bind group layout"),
-                entries: &[wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                }],
-            });
-
-        let pbr_material = material::PBRMaterial::new(
+        let pbr_material = material::PBRMaterialPipeline::new(
             &device,
             config.format,
             &camera_graphics_object.bind_group_layout,
             &light_bind_group_layout,
-            &pbr_factors_bind_group_layout,
         );
 
         let mut models_instanced = Vec::new();
@@ -259,7 +243,7 @@ impl<'a> State<'a> {
 
             let pbr_factors_bind_group = device.create_bind_group(&BindGroupDescriptor {
                 label: Some("PBR Factors Bind Group"),
-                layout: &pbr_factors_bind_group_layout,
+                layout: &pbr_material.pbr_factors_bind_group_layout,
                 entries: &[wgpu::BindGroupEntry {
                     binding: 0,
                     resource: pbr_factors_buffer.as_entire_binding(),

@@ -45,20 +45,35 @@ impl MaterialData {
     }
 }
 
-pub struct PBRMaterial {
+pub struct PBRMaterialPipeline {
     pub pipeline: wgpu::RenderPipeline,
     pub pipeline_layout: wgpu::PipelineLayout,
     pub textures_bind_group_layout: wgpu::BindGroupLayout,
+    pub pbr_factors_bind_group_layout: wgpu::BindGroupLayout,
 }
 
-impl PBRMaterial {
+impl PBRMaterialPipeline {
     pub fn new(
         device: &wgpu::Device,
         output_format: TextureFormat,
         camera_bind_group_layout: &wgpu::BindGroupLayout,
         light_bind_group_layout: &wgpu::BindGroupLayout,
-        pbr_factors_bind_group_layout: &wgpu::BindGroupLayout,
-    ) -> PBRMaterial {
+    ) -> PBRMaterialPipeline {
+        let pbr_factors_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("PBR Factors bind group layout"),
+                entries: &[wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                }],
+            });
+
         let textures_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 label: Some("PBR Textures bind group layout"),
@@ -120,7 +135,7 @@ impl PBRMaterial {
                 &textures_bind_group_layout,
                 camera_bind_group_layout,
                 light_bind_group_layout,
-                pbr_factors_bind_group_layout,
+                &pbr_factors_bind_group_layout,
             ],
             push_constant_ranges: &[],
         });
@@ -169,10 +184,11 @@ impl PBRMaterial {
             multiview: None,
         });
 
-        PBRMaterial {
+        PBRMaterialPipeline {
             pipeline,
             pipeline_layout,
             textures_bind_group_layout,
+            pbr_factors_bind_group_layout,
         }
     }
 

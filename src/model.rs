@@ -2,7 +2,6 @@ use crate::{
     material::{MaterialData, TextureID},
     texture::Texture,
 };
-use glam::Vec4;
 use std::collections::HashMap;
 use wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
