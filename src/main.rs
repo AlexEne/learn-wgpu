@@ -141,7 +141,7 @@ impl<'a> State<'a> {
 
         let mut textures = Vec::new();
 
-        let instance = wgpu::Instance::new(InstanceDescriptor {
+        let instance = wgpu::Instance::new(&InstanceDescriptor {
             backends: wgpu::Backends::PRIMARY,
             ..Default::default()
         });
@@ -495,7 +495,7 @@ pub fn run() -> Result<(), EventLoopError> {
                         state.resize(state.size);
                     }
                     Err(SurfaceError::OutOfMemory) => control_flow.exit(),
-                    Err(SurfaceError::Timeout) => {}
+                    Err(SurfaceError::Timeout | SurfaceError::Other)=> {}
                 }
             }
             _ => {}
