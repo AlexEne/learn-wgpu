@@ -175,7 +175,7 @@ impl<'a> State<'a> {
             .await
             .unwrap();
 
-        let models = Model::from_gltf(&device, &queue, "data/Avocado.glb", &mut textures);
+        let models = Model::from_gltf(&device, &queue, "data/Corset.glb", &mut textures);
 
         let config = State::configure_surface(&surface, &adapter, &device, size);
 
@@ -431,15 +431,7 @@ fn create_instances(
             (0..INSTANCES_PER_ROW).map(move |x| {
                 let position = glam::Vec3::new(x as f32, 0.0, z as f32);
 
-                let rotation;
-                if position == glam::Vec3::ZERO {
-                    rotation = glam::Quat::from_axis_angle(glam::Vec3::Y, 0.0);
-                } else {
-                    rotation = glam::Quat::from_axis_angle(
-                        position.normalize(),
-                        std::f32::consts::PI / 4.0,
-                    );
-                }
+                let rotation = glam::Quat::from_axis_angle(glam::Vec3::Y, 0.0);
 
                 Instance { position, rotation }
             })

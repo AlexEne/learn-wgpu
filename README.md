@@ -37,8 +37,8 @@ Is it simple to use and understand (for my needs)?
 Does it have some clear ownership?  
 Is it flexible and easy to extend in the right places?  
 
-In the meantime, here's some Avocados rendered with it:
-<img width="799" alt="Screenshot 2024-12-22 at 16 20 58" src="https://github.com/user-attachments/assets/aec17b46-d23e-459e-937a-88d887e6c27c" />
+In the meantime, here's where we are with it:
+<img width="628" alt="Screenshot 2024-12-22 at 16 20 58" src="./render.gif" />
 
 ## Some things I found useful
 

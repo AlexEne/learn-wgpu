@@ -2,6 +2,7 @@ use crate::{
     material::{MaterialData, TextureID},
     texture::Texture,
 };
+use gltf::mesh::util::tex_coords;
 use std::collections::HashMap;
 use wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
@@ -45,8 +46,16 @@ impl Model {
                 let reader = primitive.reader(|buffer| Some(&buffers[buffer.index()]));
 
                 let positions = reader.read_positions().unwrap();
-                let tex_coords: Vec<[f32; 2]> =
-                    reader.read_tex_coords(0).unwrap().into_f32().collect();
+                let Some(tex_coords) = reader.read_tex_coords(0) else {
+                    println!(
+                        "No tex_coords found for mesh: {:?} primitive {:?}",
+                        mesh.name(),
+                        idx
+                    );
+                    continue;
+                };
+
+                let tex_coords: Vec<[f32; 2]> = tex_coords.into_f32().collect();
 
                 let normals = reader.read_normals().unwrap();
 
@@ -64,7 +73,14 @@ impl Model {
                 let primitive_material = primitive.material();
 
                 let pbr_metalic_roughness = primitive_material.pbr_metallic_roughness();
-                let base_texture = pbr_metalic_roughness.base_color_texture().unwrap();
+                let Some(base_texture) = pbr_metalic_roughness.base_color_texture() else {
+                    println!(
+                        "No base_color_texture found for mesh: {:?} primitive {:?}",
+                        mesh.name(),
+                        idx
+                    );
+                    continue;
+                };
 
                 let base_texture_id = base_texture.texture().source().index();
 
@@ -88,12 +104,19 @@ impl Model {
                         TextureID(id)
                     };
 
-                let metalid_roughness_texture_id = pbr_metalic_roughness
-                    .metallic_roughness_texture()
-                    .unwrap()
-                    .texture()
-                    .source()
-                    .index();
+                let Some(metalid_roughness_texture_id) =
+                    pbr_metalic_roughness.metallic_roughness_texture()
+                else {
+                    println!(
+                        "No metallic_roughness_texture found for mesh: {:?} primitive {:?}",
+                        mesh.name(),
+                        idx
+                    );
+                    continue;
+                };
+
+                let metalid_roughness_texture_id =
+                    metalid_roughness_texture_id.texture().source().index();
 
                 let metalic_roughness_texture = if let Some(metalic_roughness_texture_id) =
                     texture_map.get(&metalid_roughness_texture_id)

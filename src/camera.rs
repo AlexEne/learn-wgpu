@@ -149,7 +149,7 @@ impl Camera {
                 // let driver = self.camera_rig.driver_mut::<YawPitch>();
                 // driver.rotate_yaw_pitch(10.0, 0.0);
                 let driver = self.camera_rig.driver_mut::<Position>();
-                driver.translate(movement);
+                driver.translate(movement * 0.25);
             }
             _ => {}
         }
