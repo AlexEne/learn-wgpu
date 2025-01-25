@@ -1,5 +1,8 @@
 use glam::Vec4;
-use wgpu::{MultisampleState, PipelineLayoutDescriptor, TextureFormat};
+use wgpu::{
+    util::{DeviceExt, DrawIndexedIndirectArgs},
+    MultisampleState, PipelineLayoutDescriptor, TextureFormat,
+};
 
 use crate::{
     model::{ModelGPUDataInstanced, ModelVertex, Vertex},
@@ -50,6 +53,8 @@ pub struct PBRMaterialPipeline {
     pub pipeline_layout: wgpu::PipelineLayout,
     pub textures_bind_group_layout: wgpu::BindGroupLayout,
     pub pbr_factors_bind_group_layout: wgpu::BindGroupLayout,
+
+    indirect_draw_buffer: wgpu::Buffer,
 }
 
 impl PBRMaterialPipeline {
@@ -184,11 +189,39 @@ impl PBRMaterialPipeline {
             multiview: None,
         });
 
+        let indirect_args = [
+            DrawIndexedIndirectArgs {
+                index_count: 54972, // Number of indices to draw (from index buffer)
+                instance_count: 1,
+                first_index: 0,
+                base_vertex: 0,
+                first_instance: 0,
+            },
+            DrawIndexedIndirectArgs {
+                index_count: 54972,
+                instance_count: 1,
+                first_index: 10000, // Skip a few on purpose so we see a difference
+                base_vertex: 0,
+                first_instance: 1,
+            },
+        ];
+        let indirect_draw_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Indirect Buffer"),
+            contents: unsafe {
+                std::slice::from_raw_parts(
+                    indirect_args.as_ptr() as *const u8,
+                    std::mem::size_of_val(&indirect_args),
+                )
+            },
+            usage: wgpu::BufferUsages::INDIRECT,
+        });
+
         PBRMaterialPipeline {
             pipeline,
             pipeline_layout,
             textures_bind_group_layout,
             pbr_factors_bind_group_layout,
+            indirect_draw_buffer,
         }
     }
 
@@ -213,11 +246,7 @@ impl PBRMaterialPipeline {
             index_buffer.index_buffer_format,
         );
 
-        render_pass.draw_indexed(
-            0..index_buffer.num_indices,
-            0,
-            0..model_gpu_instanced.num_instances,
-        );
+        render_pass.multi_draw_indexed_indirect(&self.indirect_draw_buffer, 0, 2);
     }
 }
 

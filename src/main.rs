@@ -81,7 +81,12 @@ impl Instance {
     }
 
     fn desc() -> VertexBufferLayout<'static> {
-        const ATTRIBUTES: [VertexAttribute; 4] = wgpu::vertex_attr_array![5 => Float32x4, 6 => Float32x4, 7 => Float32x4, 8 => Float32x4];
+        const ATTRIBUTES: [VertexAttribute; 4] = wgpu::vertex_attr_array![
+            5 => Float32x4,
+            6 => Float32x4,
+            7 => Float32x4,
+            8 => Float32x4
+        ];
         VertexBufferLayout {
             array_stride: std::mem::size_of::<InstanceRaw>() as wgpu::BufferAddress,
             step_mode: wgpu::VertexStepMode::Instance,
@@ -158,9 +163,9 @@ impl<'a> State<'a> {
             .unwrap();
 
         #[cfg(windows)]
-        let required_features = Features::SPIRV_SHADER_PASSTHROUGH;
+        let required_features = Features::SPIRV_SHADER_PASSTHROUGH | Features::MULTI_DRAW_INDIRECT;
         #[cfg(not(windows))]
-        let required_features = Features::empty();
+        let required_features = Features::MULTI_DRAW_INDIRECT;
 
         let (device, queue) = adapter
             .request_device(
@@ -495,7 +500,7 @@ pub fn run() -> Result<(), EventLoopError> {
                         state.resize(state.size);
                     }
                     Err(SurfaceError::OutOfMemory) => control_flow.exit(),
-                    Err(SurfaceError::Timeout | SurfaceError::Other)=> {}
+                    Err(SurfaceError::Timeout | SurfaceError::Other) => {}
                 }
             }
             _ => {}
