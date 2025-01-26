@@ -8,9 +8,17 @@ struct DrawIndirectCommand {
     uint first_instance;
 };
 
+//TODO
+// To cull a single instance, we need to write the instance matrices buffer here too.
+// In that way we render only the visible instances.
+//
+// So we should have an input instance buffer here and an output instance buffer (that only contains the visible instances)
+// The output instance buffer should be used in the vertex shader to get the correct instance matrix.
+
 layout(std430, set = 0, binding = 0) buffer DrawCommands {
     DrawIndirectCommand commands[];
 };
+
 
 layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
 
@@ -21,6 +29,7 @@ void main() {
     if (index >= commands.length()) {
         return;
     }
+
 
     commands[1].first_index = 0;
 }
