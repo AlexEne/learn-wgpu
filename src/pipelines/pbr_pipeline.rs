@@ -50,7 +50,6 @@ impl MaterialData {
 
 pub struct PBRMaterialPipeline {
     pub pipeline: wgpu::RenderPipeline,
-    pub pipeline_layout: wgpu::PipelineLayout,
     pub textures_bind_group_layout: wgpu::BindGroupLayout,
     pub pbr_factors_bind_group_layout: wgpu::BindGroupLayout,
 }
@@ -189,7 +188,6 @@ impl PBRMaterialPipeline {
 
         PBRMaterialPipeline {
             pipeline,
-            pipeline_layout,
             textures_bind_group_layout,
             pbr_factors_bind_group_layout,
         }
