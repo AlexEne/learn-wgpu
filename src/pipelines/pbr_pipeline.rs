@@ -1,8 +1,5 @@
 use glam::Vec4;
-use wgpu::{
-    util::{DeviceExt, DrawIndexedIndirectArgs},
-    MultisampleState, PipelineLayoutDescriptor, TextureFormat,
-};
+use wgpu::{MultisampleState, PipelineLayoutDescriptor, TextureFormat};
 
 use crate::{
     model::{ModelGPUDataInstanced, ModelVertex, Vertex},
