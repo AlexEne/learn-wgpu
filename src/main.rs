@@ -1,6 +1,6 @@
 mod camera;
-mod material;
 mod model;
+mod pipelines;
 mod shader_compiler;
 mod texture;
 use std::time;
@@ -9,8 +9,8 @@ use camera::{Camera, CameraGraphicsObject};
 use glam::{Quat, Vec3};
 mod light;
 use light::LightModel;
-use material::{PBRMaterialInstance, PBRMaterialPipeline};
 use model::{Model, ModelGPUData, ModelGPUDataInstanced};
+use pipelines::{PBRMaterialInstance, PBRMaterialPipeline};
 use wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
     BindGroupDescriptor, BindGroupLayoutDescriptor, BindGroupLayoutEntry, BindingType, Color,
@@ -231,7 +231,7 @@ impl<'a> State<'a> {
             }],
         });
 
-        let pbr_material = material::PBRMaterialPipeline::new(
+        let pbr_material = pipelines::PBRMaterialPipeline::new(
             &device,
             config.format,
             &camera_graphics_object.bind_group_layout,
@@ -239,7 +239,7 @@ impl<'a> State<'a> {
         );
 
         let mut models_instanced = Vec::new();
-        for model in &models {
+        for model in models.iter() {
             let pbr_factors_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("PBR Factors Buffer"),
                 contents: bytemuck::cast_slice(&[model.material.pbr_factors]),

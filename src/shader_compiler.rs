@@ -106,3 +106,48 @@ pub fn compile_shaders(
 
     (vertex_shader, fragment_shader)
 }
+
+pub struct ComputeShaderInput<'a> {
+    pub shader_code: &'a str,
+    pub file_name: &'a str,
+    pub entry_point: &'a str,
+}
+
+pub fn compile_compute_shader(
+    device: &wgpu::Device,
+    compute_shader_source: ComputeShaderInput,
+) -> wgpu::ShaderModule {
+    let compiler = shaderc::Compiler::new().unwrap();
+    let mut compile_options = CompileOptions::new().unwrap();
+
+    compile_options.set_include_callback(MyIncludeResolver::resolve_include);
+
+    #[cfg(windows)]
+    compile_options.set_generate_debug_info();
+
+    let compute_shader = compiler
+        .compile_into_spirv(
+            compute_shader_source.shader_code,
+            shaderc::ShaderKind::Compute,
+            compute_shader_source.file_name,
+            compute_shader_source.entry_point,
+            Some(&compile_options),
+        )
+        .unwrap();
+
+    #[cfg(windows)]
+    let compute_shader = unsafe {
+        device.create_shader_module_spirv(&wgpu::ShaderModuleDescriptorSpirV {
+            label: Some(compute_shader_input.file_name),
+            source: wgpu::util::make_spirv_raw(&compute_shader.as_binary_u8()),
+        })
+    };
+
+    #[cfg(not(windows))]
+    let compute_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+        label: Some("PBR Material Vertex Shader"),
+        source: wgpu::util::make_spirv(&compute_shader.as_binary_u8()),
+    });
+
+    compute_shader
+}

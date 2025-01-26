@@ -123,12 +123,12 @@ impl PBRMaterialPipeline {
         let (vertex_shader, fragment_shader) = shader_compiler::compile_shaders(
             device,
             shader_compiler::ShaderInput {
-                shader_code: include_str!("shaders/vertex_shader.vert"),
+                shader_code: include_str!("../shaders/vertex_shader.vert"),
                 file_name: "vertex_shader.vert",
                 entry_point: "main",
             },
             shader_compiler::ShaderInput {
-                shader_code: include_str!("shaders/fragment.frag"),
+                shader_code: include_str!("../shaders/fragment.frag"),
                 file_name: "fragment.frag",
                 entry_point: "main",
             },

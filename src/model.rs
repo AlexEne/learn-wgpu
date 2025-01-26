@@ -1,8 +1,7 @@
 use crate::{
-    material::{MaterialData, TextureID},
+    pipelines::{MaterialData, TextureID},
     texture::Texture,
 };
-use gltf::mesh::util::tex_coords;
 use std::collections::HashMap;
 use wgpu::{
     util::{BufferInitDescriptor, DeviceExt},
