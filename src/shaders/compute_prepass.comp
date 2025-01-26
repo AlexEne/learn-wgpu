@@ -1,0 +1,26 @@
+#version 450
+
+struct DrawIndirectCommand {
+    uint index_count;
+    uint instance_count;
+    uint first_index;
+    uint base_vertex;
+    uint first_instance;
+};
+
+layout(std430, set = 0, binding = 0) buffer DrawCommands {
+    DrawIndirectCommand commands[];
+};
+
+layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+
+void main() {
+    uint index = gl_GlobalInvocationID.x;
+
+    // Early exit if thread index exceeds command count
+    if (index >= commands.length()) {
+        return;
+    }
+
+    commands[1].first_index = 0;
+}

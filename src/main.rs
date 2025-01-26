@@ -10,9 +10,9 @@ use glam::{Quat, Vec3};
 mod light;
 use light::LightModel;
 use model::{Model, ModelGPUData, ModelGPUDataInstanced};
-use pipelines::{PBRMaterialInstance, PBRMaterialPipeline};
+use pipelines::{ComputePipeline, PBRMaterialInstance, PBRMaterialPipeline};
 use wgpu::{
-    util::{BufferInitDescriptor, DeviceExt},
+    util::{BufferInitDescriptor, DeviceExt, DrawIndexedIndirectArgs},
     BindGroupDescriptor, BindGroupLayoutDescriptor, BindGroupLayoutEntry, BindingType, Color,
     CommandEncoderDescriptor, Features, InstanceDescriptor, Limits, MemoryHints,
     RenderPassColorAttachment, RenderPassDescriptor, ShaderStages, SurfaceError,
@@ -37,7 +37,8 @@ struct State<'a> {
     // unsafe references to the window's resources.
     window: &'a Window,
 
-    pbr_material: PBRMaterialPipeline,
+    prb_material_pipeline: PBRMaterialPipeline,
+    compute_pipeline: ComputePipeline,
 
     camera: Camera,
     camera_graphics_object: CameraGraphicsObject,
@@ -54,6 +55,8 @@ struct State<'a> {
     models_instanced: Vec<InstancedModel>,
 
     textures: Vec<texture::Texture>,
+
+    indirect_draw_buffer: wgpu::Buffer,
 }
 
 struct InstancedModel {
@@ -231,7 +234,7 @@ impl<'a> State<'a> {
             }],
         });
 
-        let pbr_material = pipelines::PBRMaterialPipeline::new(
+        let prb_material_pipeline = pipelines::PBRMaterialPipeline::new(
             &device,
             config.format,
             &camera_graphics_object.bind_group_layout,
@@ -248,7 +251,7 @@ impl<'a> State<'a> {
 
             let pbr_factors_bind_group = device.create_bind_group(&BindGroupDescriptor {
                 label: Some("PBR Factors Bind Group"),
-                layout: &pbr_material.pbr_factors_bind_group_layout,
+                layout: &prb_material_pipeline.pbr_factors_bind_group_layout,
                 entries: &[wgpu::BindGroupEntry {
                     binding: 0,
                     resource: pbr_factors_buffer.as_entire_binding(),
@@ -259,7 +262,7 @@ impl<'a> State<'a> {
             let metalic_roughness = &textures[model.material.metalic_roughness_texture.0];
             let textures_binding_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("Diffuse Bind Group"),
-                layout: &pbr_material.textures_bind_group_layout,
+                layout: &prb_material_pipeline.textures_bind_group_layout,
                 entries: &[
                     wgpu::BindGroupEntry {
                         binding: 0,
@@ -296,8 +299,40 @@ impl<'a> State<'a> {
 
         let depth_texture = texture::Texture::create_depth_texture(&device, &config);
 
+        let indirect_args = [
+            DrawIndexedIndirectArgs {
+                index_count: 54972, // Number of indices to draw (from index buffer)
+                instance_count: 1,
+                first_index: 0,
+                base_vertex: 0,
+                first_instance: 0,
+            },
+            DrawIndexedIndirectArgs {
+                index_count: 54972,
+                instance_count: 1,
+                first_index: 10000, // Skip a few on purpose so we see a difference
+                base_vertex: 0,
+                first_instance: 1,
+            },
+        ];
+
+        let indirect_draw_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Indirect Buffer"),
+            contents: unsafe {
+                std::slice::from_raw_parts(
+                    indirect_args.as_ptr() as *const u8,
+                    std::mem::size_of_val(&indirect_args),
+                )
+            },
+            usage: wgpu::BufferUsages::INDIRECT | wgpu::BufferUsages::STORAGE,
+        });
+
+        let compute_pipeline = pipelines::ComputePipeline::new(&device, &indirect_draw_buffer);
+
         State {
-            pbr_material,
+            prb_material_pipeline,
+            compute_pipeline,
+
             surface,
             device,
             queue,
@@ -317,6 +352,7 @@ impl<'a> State<'a> {
             models_instanced,
 
             textures,
+            indirect_draw_buffer,
         }
     }
 
@@ -371,6 +407,14 @@ impl<'a> State<'a> {
             });
 
         {
+            let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+                label: Some("Compute pass"),
+                timestamp_writes: None,
+            });
+            self.compute_pipeline.compute(&mut compute_pass);
+        }
+
+        {
             let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
                 label: Some("Render Pass 1"),
                 color_attachments: &[
@@ -402,7 +446,7 @@ impl<'a> State<'a> {
             });
 
             for instanced_model in self.models_instanced.iter() {
-                self.pbr_material.draw_instanced(
+                self.prb_material_pipeline.draw_instanced(
                     &mut render_pass,
                     PBRMaterialInstance {
                         textures_bind_group: &instanced_model.textures_binding_group,
@@ -411,6 +455,7 @@ impl<'a> State<'a> {
                         pbr_factors_bind_group: &instanced_model.pbr_factors_bind_group,
                     },
                     &instanced_model.model_gpu_instanced,
+                    &self.indirect_draw_buffer,
                 );
             }
 
