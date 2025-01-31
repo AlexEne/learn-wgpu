@@ -42,20 +42,20 @@ impl Texture {
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: format,
+            format,
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
             view_formats: &[],
         });
 
         queue.write_texture(
-            wgpu::ImageCopyTexture {
+            wgpu::TexelCopyTextureInfo {
                 aspect: wgpu::TextureAspect::All,
                 texture: &texture,
                 mip_level: 0,
                 origin: wgpu::Origin3d::ZERO,
             },
             &rgba,
-            wgpu::ImageDataLayout {
+            wgpu::TexelCopyBufferLayout {
                 offset: 0,
                 bytes_per_row: Some(4 * dimensions.0),
                 rows_per_image: Some(dimensions.1),

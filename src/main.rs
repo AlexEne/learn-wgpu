@@ -55,14 +55,17 @@ struct State<'a> {
     models_instanced: Vec<InstancedModel>,
 
     textures: Vec<texture::Texture>,
-
-    indirect_draw_buffer: wgpu::Buffer,
 }
 
 struct InstancedModel {
     instances: Vec<Instance>,
     model_gpu_instanced: ModelGPUDataInstanced,
 
+    // Buffer for indirect draw calls that gets filled by the compute pass
+    indirect_draw_buffer: wgpu::Buffer,
+    compute_bind_group: wgpu::BindGroup,
+
+    // Bind groups for the textures and pbr factors used during render pass
     textures_binding_group: wgpu::BindGroup,
     pbr_factors_bind_group: wgpu::BindGroup,
     pbr_factors_buffer: wgpu::Buffer,
@@ -241,7 +244,10 @@ impl<'a> State<'a> {
             &light_bind_group_layout,
         );
 
+        let compute_pipeline = pipelines::ComputePipeline::new(&device);
+
         let mut models_instanced = Vec::new();
+        let mut indirect_args = Vec::new();
         for model in models.iter() {
             let pbr_factors_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("PBR Factors Buffer"),
@@ -286,48 +292,53 @@ impl<'a> State<'a> {
             let (model_gpu_instanced, instances) =
                 create_instances(&device, model.create_gpu_data(&device));
 
+            indirect_args.push(DrawIndexedIndirectArgs {
+                index_count: model_gpu_instanced.model_gpu_data.index_buffer.num_indices,
+                instance_count: model_gpu_instanced.num_instances,
+                first_index: 0,
+                base_vertex: 0,
+                first_instance: 0,
+            });
+
+            let indirect_draw_buffer =
+                device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                    label: Some("Indirect Buffer"),
+                    contents: unsafe {
+                        std::slice::from_raw_parts(
+                            indirect_args.as_ptr() as *const u8,
+                            std::mem::size_of_val(&indirect_args),
+                        )
+                    },
+                    usage: wgpu::BufferUsages::INDIRECT | wgpu::BufferUsages::STORAGE,
+                });
+
+            let compute_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("Compute bind group"),
+                layout: &compute_pipeline.compute_bind_group_layout,
+                entries: &[wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+                        buffer: &indirect_draw_buffer,
+                        offset: 0,
+                        size: None,
+                    }),
+                }],
+            });
+
             let instanced_model = InstancedModel {
                 instances,
                 model_gpu_instanced,
                 textures_binding_group,
                 pbr_factors_bind_group,
                 pbr_factors_buffer,
+                indirect_draw_buffer,
+                compute_bind_group,
             };
 
             models_instanced.push(instanced_model);
         }
 
         let depth_texture = texture::Texture::create_depth_texture(&device, &config);
-
-        let indirect_args = [
-            DrawIndexedIndirectArgs {
-                index_count: 54972, // Number of indices to draw (from index buffer)
-                instance_count: 1,
-                first_index: 0,
-                base_vertex: 0,
-                first_instance: 0,
-            },
-            DrawIndexedIndirectArgs {
-                index_count: 54972,
-                instance_count: 1,
-                first_index: 10000, // Skip a few on purpose so we see a difference
-                base_vertex: 0,
-                first_instance: 1,
-            },
-        ];
-
-        let indirect_draw_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Indirect Buffer"),
-            contents: unsafe {
-                std::slice::from_raw_parts(
-                    indirect_args.as_ptr() as *const u8,
-                    std::mem::size_of_val(&indirect_args),
-                )
-            },
-            usage: wgpu::BufferUsages::INDIRECT | wgpu::BufferUsages::STORAGE,
-        });
-
-        let compute_pipeline = pipelines::ComputePipeline::new(&device, &indirect_draw_buffer);
 
         State {
             prb_material_pipeline,
@@ -350,9 +361,7 @@ impl<'a> State<'a> {
             camera_graphics_object,
 
             models_instanced,
-
             textures,
-            indirect_draw_buffer,
         }
     }
 
@@ -400,52 +409,57 @@ impl<'a> State<'a> {
             .texture
             .create_view(&TextureViewDescriptor::default());
 
-        let mut encoder = self
+        let mut compute_encoder = self
             .device
             .create_command_encoder(&CommandEncoderDescriptor {
-                label: Some("Main encoder"),
+                label: Some("Compute encoder"),
             });
 
-        {
-            let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
-                label: Some("Compute pass"),
-                timestamp_writes: None,
-            });
-            self.compute_pipeline.compute(&mut compute_pass);
-        }
+        let mut compute_pass = compute_encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
+            label: Some("Compute pass"),
+            timestamp_writes: None,
+        });
 
-        {
-            let mut render_pass = encoder.begin_render_pass(&RenderPassDescriptor {
-                label: Some("Render Pass 1"),
-                color_attachments: &[
-                    // This is what @location(0) in the fragment shader targets
-                    Some(RenderPassColorAttachment {
-                        view: &view,
-                        resolve_target: None,
-                        ops: wgpu::Operations {
-                            load: wgpu::LoadOp::Clear(Color {
-                                r: 0.1,
-                                g: 0.2,
-                                b: 0.3,
-                                a: 1.0,
-                            }),
-                            store: wgpu::StoreOp::Store,
-                        },
-                    }),
-                ],
-                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                    view: &self.depth_texture.view,
-                    depth_ops: Some(wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(0.0),
+        let mut render_encoder = self
+            .device
+            .create_command_encoder(&CommandEncoderDescriptor {
+                label: Some("Render Encoder"),
+            });
+        let mut render_pass = render_encoder.begin_render_pass(&RenderPassDescriptor {
+            label: Some("Render Pass 1"),
+            color_attachments: &[
+                // This is what @location(0) in the fragment shader targets
+                Some(RenderPassColorAttachment {
+                    view: &view,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(Color {
+                            r: 0.1,
+                            g: 0.2,
+                            b: 0.3,
+                            a: 1.0,
+                        }),
                         store: wgpu::StoreOp::Store,
-                    }),
-                    stencil_ops: None,
+                    },
                 }),
-                occlusion_query_set: None,
-                timestamp_writes: None,
-            });
+            ],
+            depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                view: &self.depth_texture.view,
+                depth_ops: Some(wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(0.0),
+                    store: wgpu::StoreOp::Store,
+                }),
+                stencil_ops: None,
+            }),
+            occlusion_query_set: None,
+            timestamp_writes: None,
+        });
 
+        {
             for instanced_model in self.models_instanced.iter() {
+                self.compute_pipeline
+                    .compute(&mut compute_pass, &instanced_model.compute_bind_group);
+
                 self.prb_material_pipeline.draw_instanced(
                     &mut render_pass,
                     PBRMaterialInstance {
@@ -455,7 +469,7 @@ impl<'a> State<'a> {
                         pbr_factors_bind_group: &instanced_model.pbr_factors_bind_group,
                     },
                     &instanced_model.model_gpu_instanced,
-                    &self.indirect_draw_buffer,
+                    &instanced_model.indirect_draw_buffer,
                 );
             }
 
@@ -463,7 +477,11 @@ impl<'a> State<'a> {
                 .render(&mut render_pass, &self.camera_graphics_object.bind_group);
         }
 
-        self.queue.submit(std::iter::once(encoder.finish()));
+        drop(compute_pass);
+        drop(render_pass);
+        self.queue.submit(std::iter::once(compute_encoder.finish()));
+        self.queue.submit(std::iter::once(render_encoder.finish()));
+
         output.present();
 
         Ok(())

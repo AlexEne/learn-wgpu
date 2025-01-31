@@ -212,7 +212,7 @@ impl PBRMaterialPipeline {
             index_buffer.index_buffer_format,
         );
 
-        render_pass.multi_draw_indexed_indirect(indirect_draw_buffer, 0, 2);
+        render_pass.multi_draw_indexed_indirect(indirect_draw_buffer, 0, 1);
     }
 }
 
