@@ -186,7 +186,9 @@ impl<'a> State<'a> {
             .await
             .unwrap();
 
-        let models = Model::from_gltf(&device, &queue, "data/Corset.glb", &mut textures);
+        let mut models = Model::from_gltf(&device, &queue, "data/Corset.glb", &mut textures);
+        let avocado = Model::from_gltf(&device, &queue, "data/Avocado.glb", &mut textures);
+        models.extend(avocado.into_iter());
 
         let config = State::configure_surface(&surface, &adapter, &device, size);
 
@@ -248,7 +250,7 @@ impl<'a> State<'a> {
 
         let mut models_instanced = Vec::new();
         let mut indirect_args = Vec::new();
-        for model in models.iter() {
+        for (idx, model) in models.iter().enumerate() {
             let pbr_factors_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("PBR Factors Buffer"),
                 contents: bytemuck::cast_slice(&[model.material.pbr_factors]),
@@ -290,7 +292,7 @@ impl<'a> State<'a> {
             });
 
             let (model_gpu_instanced, instances) =
-                create_instances(&device, model.create_gpu_data(&device));
+                create_instances(&device, model.create_gpu_data(&device), 0.7 * idx as f32);
 
             indirect_args.push(DrawIndexedIndirectArgs {
                 index_count: model_gpu_instanced.model_gpu_data.index_buffer.num_indices,
@@ -455,27 +457,25 @@ impl<'a> State<'a> {
             timestamp_writes: None,
         });
 
-        {
-            for instanced_model in self.models_instanced.iter() {
-                self.compute_pipeline
-                    .compute(&mut compute_pass, &instanced_model.compute_bind_group);
+        for instanced_model in self.models_instanced.iter() {
+            self.compute_pipeline
+                .compute(&mut compute_pass, &instanced_model.compute_bind_group);
 
-                self.prb_material_pipeline.draw_instanced(
-                    &mut render_pass,
-                    PBRMaterialInstance {
-                        textures_bind_group: &instanced_model.textures_binding_group,
-                        camera_bind_group: &self.camera_graphics_object.bind_group,
-                        light_bind_group: &self.light_bind_group,
-                        pbr_factors_bind_group: &instanced_model.pbr_factors_bind_group,
-                    },
-                    &instanced_model.model_gpu_instanced,
-                    &instanced_model.indirect_draw_buffer,
-                );
-            }
-
-            self.light_model
-                .render(&mut render_pass, &self.camera_graphics_object.bind_group);
+            self.prb_material_pipeline.draw_instanced(
+                &mut render_pass,
+                PBRMaterialInstance {
+                    textures_bind_group: &instanced_model.textures_binding_group,
+                    camera_bind_group: &self.camera_graphics_object.bind_group,
+                    light_bind_group: &self.light_bind_group,
+                    pbr_factors_bind_group: &instanced_model.pbr_factors_bind_group,
+                },
+                &instanced_model.model_gpu_instanced,
+                &instanced_model.indirect_draw_buffer,
+            );
         }
+
+        self.light_model
+            .render(&mut render_pass, &self.camera_graphics_object.bind_group);
 
         drop(compute_pass);
         drop(render_pass);
@@ -491,13 +491,14 @@ impl<'a> State<'a> {
 fn create_instances(
     device: &wgpu::Device,
     model_data: ModelGPUData,
+    y_offset: f32,
 ) -> (ModelGPUDataInstanced, Vec<Instance>) {
     const INSTANCES_PER_ROW: u32 = 10;
 
     let instances: Vec<Instance> = (0..INSTANCES_PER_ROW)
         .flat_map(|z| {
             (0..INSTANCES_PER_ROW).map(move |x| {
-                let position = glam::Vec3::new(x as f32, 0.0, z as f32);
+                let position = glam::Vec3::new(x as f32, y_offset, z as f32);
 
                 let rotation = glam::Quat::from_axis_angle(glam::Vec3::Y, 0.0);
 
