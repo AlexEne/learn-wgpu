@@ -24,6 +24,7 @@ pub struct Model {
     pub vertices: Vec<ModelVertex>,
     pub indices: Vec<u32>, // A bit wasteful since they could be u16
     pub material: MaterialData,
+    pub aabb: AABB,
 }
 
 impl Model {
@@ -41,6 +42,7 @@ impl Model {
         for mesh in document.meshes() {
             for (idx, primitive) in mesh.primitives().enumerate() {
                 let mut vertices = vec![];
+                let mut aabb = AABB::default();
 
                 let reader = primitive.reader(|buffer| Some(&buffers[buffer.index()]));
 
@@ -59,6 +61,17 @@ impl Model {
                 let normals = reader.read_normals().unwrap();
 
                 for ((position, tex_coord), normal) in positions.zip(tex_coords).zip(normals) {
+                    // Adjust AABB
+                    for i in 0..3 {
+                        if position[i] < aabb.min[i] {
+                            aabb.min[i] = position[i];
+                        }
+
+                        if position[i] > aabb.max[i] {
+                            aabb.max[i] = position[i];
+                        }
+                    }
+
                     let vertex = ModelVertex {
                         position,
                         normal,
@@ -155,6 +168,7 @@ impl Model {
                         roughness_factor,
                         base_color_factor,
                     ),
+                    aabb,
                 });
             }
         }
@@ -162,7 +176,7 @@ impl Model {
         models
     }
 
-    fn create_buffers(&self, device: &wgpu::Device) -> (wgpu::Buffer, wgpu::Buffer) {
+    fn create_buffers(&self, device: &wgpu::Device) -> (wgpu::Buffer, wgpu::Buffer, wgpu::Buffer) {
         let vertex_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: Some("Vertex Buffer"),
             contents: bytemuck::cast_slice(&self.vertices),
@@ -175,11 +189,18 @@ impl Model {
             usage: wgpu::BufferUsages::INDEX,
         });
 
-        (vertex_buffer, index_buffer)
+        let aabb = device.create_buffer_init(&BufferInitDescriptor {
+            label: Some("AABB Buffer"),
+            contents: bytemuck::cast_slice(&[self.aabb]),
+            usage: wgpu::BufferUsages::UNIFORM,
+        });
+
+        (vertex_buffer, index_buffer, aabb)
     }
 
     pub fn create_gpu_data(&self, device: &wgpu::Device) -> ModelGPUData {
-        let (vertex_buffer, index_buffer) = self.create_buffers(device);
+        let (vertex_buffer, index_buffer, aabb) = self.create_buffers(device);
+
         ModelGPUData {
             vertex_buffer,
             index_buffer: WGPUIndexBufferData {
@@ -187,6 +208,7 @@ impl Model {
                 num_indices: self.indices.len() as _,
                 index_buffer_format: wgpu::IndexFormat::Uint32, // Wasteful for now
             },
+            bounding_box: aabb,
         }
     }
 }
@@ -223,9 +245,17 @@ impl Vertex for ModelVertex {
     }
 }
 
+#[repr(C)]
+#[derive(Debug, Copy, Default, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct AABB {
+    pub min: [f32; 4],
+    pub max: [f32; 4],
+}
+
 pub struct ModelGPUData {
     pub vertex_buffer: wgpu::Buffer,
     pub index_buffer: WGPUIndexBufferData,
+    pub bounding_box: wgpu::Buffer,
 }
 
 pub struct ModelGPUDataInstanced {

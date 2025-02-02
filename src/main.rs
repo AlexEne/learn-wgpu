@@ -350,6 +350,14 @@ impl<'a> State<'a> {
                             size: None,
                         }),
                     },
+                    wgpu::BindGroupEntry {
+                        binding: 3,
+                        resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+                            buffer: &model_gpu_instanced.model_gpu_data.bounding_box,
+                            offset: 0,
+                            size: None,
+                        }),
+                    },
                 ],
             });
 

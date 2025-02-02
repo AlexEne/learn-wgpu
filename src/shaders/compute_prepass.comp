@@ -20,6 +20,11 @@ layout(set = 0, binding = 2) buffer InstanceOutputBuffer {
     mat4 instance_output_matrices[];
 };
 
+layout(set = 0, binding = 3) uniform ModelAABB {
+    vec4 aabb_min;
+    vec4 aabb_max;
+};
+
 layout(set = 1, binding = 0) uniform Camera {
     mat4 camera_mat;
     vec4 cam_pos;
@@ -38,7 +43,7 @@ void main() {
     if (command_index >= commands.length()) {
         return;
     }
-    
+
     if (instance_index >= instance_input_matrices.length()) {
         return;
     }
@@ -48,22 +53,39 @@ void main() {
     }
     // Make sure all threads see the same reset value
     barrier();
-    
+
     // TODO cull instances here
     mat4 instance_mtx = instance_input_matrices[instance_index];
-    vec3 pos = vec3(instance_mtx[3][0], instance_mtx[3][1], instance_mtx[3][2]);
-    if (pos.x > 0.0) {
-        return;
+    vec4 clip_min = camera_mat * instance_mtx * vec4(aabb_min.xyz, 1.0); 
+    vec3 v_clip_min = clip_min.xyz / clip_min.w;
+    bool min_out = false;
+    if (v_clip_min.x > 1.0 || v_clip_min.y > 1.0 || v_clip_min.z > 1.0) {
+        min_out = true;
+    } else if (v_clip_min.x < -1.0 || v_clip_min.y < -1.0 || v_clip_min.z < -1.0) {
+        min_out = true;
     }
     
-    uint idx = atomicAdd(visible_instance_count[command_index], 1);  
-    instance_output_matrices[idx] = instance_mtx;
+    vec4 clip_max = camera_mat * instance_mtx * vec4(aabb_max.xyz, 1.0);  
+    vec3 v_clip_max = clip_max.xyz / clip_max.w;
+    bool max_out = false;
+    if (v_clip_max.x > 1.0 || v_clip_max.y > 1.0 || v_clip_max.z > 1.0) {
+        max_out = true;
+    } else if (v_clip_max.x < -1.0 || v_clip_max.y < -1.0 || v_clip_max.z < -1.0) {
+        max_out = true;
+    }
     
+    if (min_out && max_out) {
+        return;
+    }
+
+    uint idx = atomicAdd(visible_instance_count[command_index], 1);
+    instance_output_matrices[idx] = instance_mtx;
+
     // Wait for all threads to finish writing to the output buffer
     barrier();
-    
+
     // Write the instance count to the command buffer
     if (command_index == 0) {
-        commands[command_index].instance_count = visible_instance_count[command_index];    
+        commands[command_index].instance_count = visible_instance_count[command_index];
     }
 }
