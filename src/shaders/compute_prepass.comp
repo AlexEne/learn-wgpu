@@ -56,25 +56,29 @@ void main() {
 
     // TODO cull instances here
     mat4 instance_mtx = instance_input_matrices[instance_index];
-    vec4 clip_min = camera_mat * instance_mtx * vec4(aabb_min.xyz, 1.0); 
+    vec4 clip_min = camera_mat * instance_mtx * vec4(aabb_min.xyz, 1.0);
     vec3 v_clip_min = clip_min.xyz / clip_min.w;
     bool min_out = false;
-    if (v_clip_min.x > 1.0 || v_clip_min.y > 1.0 || v_clip_min.z > 1.0) {
-        min_out = true;
-    } else if (v_clip_min.x < -1.0 || v_clip_min.y < -1.0 || v_clip_min.z < -1.0) {
-        min_out = true;
-    }
-    
-    vec4 clip_max = camera_mat * instance_mtx * vec4(aabb_max.xyz, 1.0);  
+
+    vec4 clip_max = camera_mat * instance_mtx * vec4(aabb_max.xyz, 1.0);
     vec3 v_clip_max = clip_max.xyz / clip_max.w;
     bool max_out = false;
-    if (v_clip_max.x > 1.0 || v_clip_max.y > 1.0 || v_clip_max.z > 1.0) {
-        max_out = true;
-    } else if (v_clip_max.x < -1.0 || v_clip_max.y < -1.0 || v_clip_max.z < -1.0) {
-        max_out = true;
+
+    if (clip_min.w <= 0.0 && clip_max.w <= 0.0) {
+        // Check if we are behind the camera.
+        // We use infinite Z so we won't cull gainst far plane.
+        return;
     }
-    
-    if (min_out && max_out) {
+
+    vec3 small = min(v_clip_max, v_clip_min);
+    vec3 big = max(v_clip_max, v_clip_min);
+
+    bool outside = false;
+    if (small.x > 1.0 || big.x < -1.0 || small.y > 1.0 || big.y < -1.0) {
+        outside = true;
+    }
+
+    if (outside) {
         return;
     }
 
