@@ -231,6 +231,7 @@ pub struct ModelGPUData {
 pub struct ModelGPUDataInstanced {
     pub model_gpu_data: ModelGPUData,
     pub instance_buffer: wgpu::Buffer,
+    pub instance_output_buffer: wgpu::Buffer,
     pub num_instances: u32,
 }
 

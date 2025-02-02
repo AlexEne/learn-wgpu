@@ -246,10 +246,18 @@ impl<'a> State<'a> {
             &light_bind_group_layout,
         );
 
-        let compute_pipeline = pipelines::ComputePipeline::new(&device);
+        let compute_pipeline =
+            pipelines::ComputePipeline::new(&device, &camera_graphics_object.bind_group_layout);
 
         let mut models_instanced = Vec::new();
         let mut indirect_args = Vec::new();
+        let instance_output_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("Instance Output Buffer"),
+            size: 1024 * 1024 * 16,
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::STORAGE,
+            mapped_at_creation: false,
+        });
+
         for (idx, model) in models.iter().enumerate() {
             let pbr_factors_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("PBR Factors Buffer"),
@@ -317,14 +325,32 @@ impl<'a> State<'a> {
             let compute_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("Compute bind group"),
                 layout: &compute_pipeline.compute_bind_group_layout,
-                entries: &[wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
-                        buffer: &indirect_draw_buffer,
-                        offset: 0,
-                        size: None,
-                    }),
-                }],
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+                            buffer: &indirect_draw_buffer,
+                            offset: 0,
+                            size: None,
+                        }),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+                            buffer: &model_gpu_instanced.instance_buffer,
+                            offset: 0,
+                            size: None,
+                        }),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 2,
+                        resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+                            buffer: &model_gpu_instanced.instance_output_buffer,
+                            offset: 0,
+                            size: None,
+                        }),
+                    },
+                ],
             });
 
             let instanced_model = InstancedModel {
@@ -458,8 +484,11 @@ impl<'a> State<'a> {
         });
 
         for instanced_model in self.models_instanced.iter() {
-            self.compute_pipeline
-                .compute(&mut compute_pass, &instanced_model.compute_bind_group);
+            self.compute_pipeline.compute(
+                &mut compute_pass,
+                &instanced_model.compute_bind_group,
+                &self.camera_graphics_object.bind_group,
+            );
 
             self.prb_material_pipeline.draw_instanced(
                 &mut render_pass,
@@ -512,13 +541,21 @@ fn create_instances(
     let instance_buffer = device.create_buffer_init(&BufferInitDescriptor {
         label: Some("Instance Buffer"),
         contents: bytemuck::cast_slice(&instances_data),
-        usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+        usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::STORAGE,
+    });
+
+    let instance_output_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some("Instance Output Buffer"),
+        size: 1024 * 1024 * 16,
+        usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::STORAGE,
+        mapped_at_creation: false,
     });
 
     (
         ModelGPUDataInstanced {
             model_gpu_data: model_data,
             instance_buffer,
+            instance_output_buffer,
             num_instances: instances.len() as u32,
         },
         instances,

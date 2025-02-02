@@ -206,7 +206,7 @@ impl PBRMaterialPipeline {
         let model_gpu_data = &model_gpu_instanced.model_gpu_data;
         let index_buffer = &model_gpu_data.index_buffer;
         render_pass.set_vertex_buffer(0, model_gpu_data.vertex_buffer.slice(..));
-        render_pass.set_vertex_buffer(1, model_gpu_instanced.instance_buffer.slice(..));
+        render_pass.set_vertex_buffer(1, model_gpu_instanced.instance_output_buffer.slice(..));
         render_pass.set_index_buffer(
             index_buffer.index_buffer.slice(..),
             index_buffer.index_buffer_format,

@@ -19,17 +19,58 @@ layout(std430, set = 0, binding = 0) buffer DrawCommands {
     DrawIndirectCommand commands[];
 };
 
+layout(set = 0, binding = 1) readonly buffer InstanceInputBuffer {
+    mat4 instance_input_matrices[];
+};
 
-layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+layout(set = 0, binding = 2) buffer InstanceOutputBuffer {
+    mat4 instance_output_matrices[];
+};
+
+layout(set = 1, binding = 0) uniform Camera {
+    mat4 camera_mat;
+    vec4 cam_pos;
+};
+
+#define MAX_INSTANCES 256
+layout(local_size_x = MAX_INSTANCES, local_size_y = 1, local_size_z = 1) in;
+
+shared uint visible_instance_count[MAX_INSTANCES];
 
 void main() {
-    uint index = gl_GlobalInvocationID.x;
+    uint instance_index = gl_GlobalInvocationID.x;
+    uint command_index = gl_GlobalInvocationID.y;
 
-    // Early exit if thread index exceeds command count
-    if (index >= commands.length()) {
+    // Early exit if thread instance_index exceeds command count
+    if (command_index >= commands.length()) {
+        return;
+    }
+    
+    if (instance_index >= instance_input_matrices.length()) {
         return;
     }
 
-
-    commands[1].first_index = 0;
+    if (command_index == 0) {
+        visible_instance_count[command_index] = 0;
+    }
+    // Make sure all threads see the same reset value
+    barrier();
+    
+    // TODO cull instances here
+    mat4 instance_mtx = instance_input_matrices[instance_index];
+    vec3 pos = vec3(instance_mtx[3][0], instance_mtx[3][1], instance_mtx[3][2]);
+    if (pos.x > 0.0) {
+        return;
+    }
+    
+    uint idx = atomicAdd(visible_instance_count[command_index], 1);  
+    instance_output_matrices[idx] = instance_mtx;
+    
+    // Wait for all threads to finish writing to the output buffer
+    barrier();
+    
+    // Write the instance count to the command buffer
+    if (command_index == 0) {
+        commands[command_index].instance_count = visible_instance_count[command_index];    
+    }
 }
