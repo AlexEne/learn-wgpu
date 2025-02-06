@@ -4,7 +4,10 @@ use wgpu::{util::DeviceExt, Color};
 use crate::{
     camera::CameraGraphicsObject,
     light::LightModel,
-    pipelines::{self, ComputePipeline, DebugMaterialInstance, DebugPipeline, PBRMaterialInstance, PBRMaterialPipeline},
+    pipelines::{
+        self, ComputePipeline, DebugMaterialInstance, DebugPipeline, PBRMaterialInstance,
+        PBRMaterialPipeline,
+    },
     texture::{self, Texture},
     InstancedModel,
 };
@@ -287,7 +290,7 @@ impl Renderer {
 
         self.debug_pipeline.draw_indexed(
             &mut render_pass,
-            DebugMaterialInstance{
+            DebugMaterialInstance {
                 camera_bind_group: &self.camera_graphics_object.bind_group,
             },
             light_model,

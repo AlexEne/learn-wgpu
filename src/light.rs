@@ -1,8 +1,6 @@
 use glam::Vec3;
 
-use crate::{
-    model::Vertex, pipelines::DebugModel, renderer::Renderer, LightUniform
-};
+use crate::{model::Vertex, pipelines::DebugModel, renderer::Renderer, LightUniform};
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
