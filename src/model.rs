@@ -1,5 +1,6 @@
 use crate::{
     pipelines::{MaterialData, TextureID},
+    renderer,
     texture::Texture,
 };
 use glam::Vec3;
@@ -27,8 +28,7 @@ pub struct Model {
 
 impl Model {
     pub fn from_gltf(
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
+        renderer: &renderer::Renderer,
         path: &str,
         textures: &mut Vec<Texture>,
     ) -> Vec<Model> {
@@ -101,8 +101,7 @@ impl Model {
                     } else {
                         let base_color_texture = get_texture(&buffers, base_texture);
                         let texture = Texture::from_bytes(
-                            device,
-                            queue,
+                            renderer,
                             wgpu::TextureFormat::Rgba8UnormSrgb,
                             &base_color_texture,
                             &format!("base_color_texture {:?}", idx),
@@ -139,8 +138,7 @@ impl Model {
                         pbr_metalic_roughness.metallic_roughness_texture().unwrap(),
                     );
                     let texture = Texture::from_bytes(
-                        device,
-                        queue,
+                        renderer,
                         wgpu::TextureFormat::Rgba8UnormSrgb,
                         &metalic_roughness_texture,
                         &format!("metallic_roughness_texture {:?}", idx),
@@ -181,30 +179,33 @@ impl Model {
         models
     }
 
-    fn create_buffers(&self, device: &wgpu::Device) -> (wgpu::Buffer, wgpu::Buffer, wgpu::Buffer) {
-        let vertex_buffer = device.create_buffer_init(&BufferInitDescriptor {
-            label: Some("Vertex Buffer"),
-            contents: bytemuck::cast_slice(&self.vertices),
-            usage: wgpu::BufferUsages::STORAGE,
-        });
+    fn create_buffers(
+        &self,
+        renderer: &renderer::Renderer,
+    ) -> (wgpu::Buffer, wgpu::Buffer, wgpu::Buffer) {
+        let vertex_buffer = renderer.create_buffer_init(
+            "Vertex Buffer",
+            bytemuck::cast_slice(&self.vertices),
+            wgpu::BufferUsages::STORAGE,
+        );
 
-        let index_buffer = device.create_buffer_init(&BufferInitDescriptor {
-            label: Some("Index Buffer"),
-            contents: bytemuck::cast_slice(&self.indices),
-            usage: wgpu::BufferUsages::INDEX,
-        });
+        let index_buffer = renderer.create_buffer_init(
+            "Index Buffer",
+            bytemuck::cast_slice(&self.indices),
+            wgpu::BufferUsages::INDEX,
+        );
 
-        let bounding_shpere = device.create_buffer_init(&BufferInitDescriptor {
-            label: Some("AABB Buffer"),
-            contents: bytemuck::cast_slice(&[self.bounding_sphere]),
-            usage: wgpu::BufferUsages::UNIFORM,
-        });
+        let bounding_shpere = renderer.create_buffer_init(
+            "AABB Buffer",
+            bytemuck::cast_slice(&[self.bounding_sphere]),
+            wgpu::BufferUsages::UNIFORM,
+        );
 
         (vertex_buffer, index_buffer, bounding_shpere)
     }
 
-    pub fn create_gpu_data(&self, device: &wgpu::Device) -> ModelGPUData {
-        let (vertex_buffer, index_buffer, bounding_sphere) = self.create_buffers(device);
+    pub fn create_gpu_data(&self, renderer: &renderer::Renderer) -> ModelGPUData {
+        let (vertex_buffer, index_buffer, bounding_sphere) = self.create_buffers(renderer);
 
         ModelGPUData {
             vertex_buffer,
