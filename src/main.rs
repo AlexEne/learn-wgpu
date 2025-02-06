@@ -13,8 +13,8 @@ use light::LightModel;
 use model::{Model, ModelGPUData, ModelGPUDataInstanced};
 use renderer::Renderer;
 use wgpu::{
-    util::{DeviceExt, DrawIndexedIndirectArgs},
-    InstanceDescriptor, SurfaceError, VertexAttribute, VertexBufferLayout,
+    util::DrawIndexedIndirectArgs, InstanceDescriptor, SurfaceError, VertexAttribute,
+    VertexBufferLayout,
 };
 use winit::{
     error::EventLoopError,
@@ -304,11 +304,8 @@ impl<'a> State<'a> {
     }
 
     fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
-        self.renderer.render(
-            &self.surface,
-            &self.models_instanced,
-            &self.light_model,
-        )
+        self.renderer
+            .render(&self.surface, &self.models_instanced, &self.light_model)
     }
 }
 
