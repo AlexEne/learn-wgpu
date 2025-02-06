@@ -4,7 +4,7 @@ use wgpu::{util::DeviceExt, Color};
 use crate::{
     camera::CameraGraphicsObject,
     light::LightModel,
-    pipelines::{self, ComputePipeline, PBRMaterialInstance, PBRMaterialPipeline},
+    pipelines::{self, ComputePipeline, DebugMaterialInstance, DebugPipeline, PBRMaterialInstance, PBRMaterialPipeline},
     texture::{self, Texture},
     InstancedModel,
 };
@@ -15,6 +15,7 @@ pub struct Renderer {
 
     pub pbr_material_pipeline: PBRMaterialPipeline,
     pub compute_pipeline: ComputePipeline,
+    pub debug_pipeline: DebugPipeline,
 
     pub textures: Vec<texture::Texture>,
     depth_texture: texture::Texture,
@@ -73,6 +74,8 @@ impl Renderer {
         let compute_pipeline =
             pipelines::ComputePipeline::new(&device, &camera_graphics_object.bind_group_layout);
 
+        let debug_pipeline = DebugPipeline::new(&device, config.format, &camera_graphics_object);
+
         let depth_texture =
             Renderer::create_depth_texture(&device, config.width.max(1), config.height.max(1));
 
@@ -82,6 +85,7 @@ impl Renderer {
 
             pbr_material_pipeline,
             compute_pipeline,
+            debug_pipeline,
 
             light_bind_group_layout,
 
@@ -281,7 +285,13 @@ impl Renderer {
             );
         }
 
-        light_model.render(&mut render_pass, &self.camera_graphics_object.bind_group);
+        self.debug_pipeline.draw_indexed(
+            &mut render_pass,
+            DebugMaterialInstance{
+                camera_bind_group: &self.camera_graphics_object.bind_group,
+            },
+            light_model,
+        );
 
         drop(compute_pass);
         drop(render_pass);

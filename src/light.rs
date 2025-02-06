@@ -1,14 +1,7 @@
 use glam::Vec3;
-use wgpu::{
-    util::DeviceExt,
-    SurfaceConfiguration,
-};
 
 use crate::{
-    model::Vertex,
-    renderer::Renderer,
-    shader_compiler::{self, compile_shaders},
-    LightUniform,
+    model::Vertex, pipelines::DebugModel, renderer::Renderer, LightUniform
 };
 
 #[repr(C)]
@@ -23,9 +16,6 @@ pub struct LightModel {
     pub light_uniform: LightUniform,
     pub vertices: Vec<LightVertex>,
     pub indices: Vec<u16>,
-    pub pipeline: wgpu::RenderPipeline,
-    pub vertex_shader: wgpu::ShaderModule,
-    pub fragment_shader: wgpu::ShaderModule,
     pub vertex_buffer: wgpu::Buffer,
     pub index_buffer: wgpu::Buffer,
     pub light_object_transform_buffer: wgpu::Buffer,
@@ -36,25 +26,22 @@ pub struct LightModel {
 
 impl LightModel {
     pub fn new(renderer: &Renderer) -> LightModel {
-        let (vertex_shader, fragment_shader) = compile_shaders(
-            &renderer.device,
-            shader_compiler::ShaderInput {
-                shader_code: include_str!("shaders/light.vert"),
-                entry_point: "main",
-                file_name: "light.vert",
-            },
-            shader_compiler::ShaderInput {
-                shader_code: include_str!("shaders/light.frag"),
-                entry_point: "main",
-                file_name: "light.frag",
-            },
+        let position = Vec3::new(0.0, 0.3, 0.3);
+        let data = glam::Mat4::from_translation(position).to_cols_array();
+
+        let light_object_transform_buffer = renderer.create_buffer_init(
+            "Light object transform buffer",
+            bytemuck::cast_slice(data.as_ref()),
+            wgpu::BufferUsages::UNIFORM,
         );
 
+        // I copied this from the DebugPipeline code.
+        // TODO don't copy this :D
         let object_transform_bind_group_layout =
             renderer
                 .device
                 .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                    label: Some("Camera object model bind group layout"),
+                    label: Some("Debug pipeline transform bind group layout"),
                     entries: &[wgpu::BindGroupLayoutEntry {
                         binding: 0,
                         visibility: wgpu::ShaderStages::VERTEX,
@@ -67,28 +54,10 @@ impl LightModel {
                     }],
                 });
 
-        let position = Vec3::new(0.0, 0.3, 0.3);
-        let data = glam::Mat4::from_translation(position).to_cols_array();
-
-        let light_object_transform_buffer = renderer.create_buffer_init(
-            "Light object transform buffer",
-            bytemuck::cast_slice(data.as_ref()),
-            wgpu::BufferUsages::UNIFORM,
-        );
-
         let light_obj_transform_bind_group = renderer.create_bind_group_for_buffers(
             "Light object transform bind group",
             &object_transform_bind_group_layout,
             &[&light_object_transform_buffer],
-        );
-
-        let pipeline = LightModel::create_light_render_pipeline(
-            &renderer.device,
-            &renderer.camera_graphics_object.bind_group_layout,
-            &object_transform_bind_group_layout,
-            &vertex_shader,
-            &fragment_shader,
-            &renderer.config,
         );
 
         let vertices = vec![
@@ -161,9 +130,6 @@ impl LightModel {
             vertices,
             indices,
             light_uniform,
-            pipeline,
-            vertex_shader,
-            fragment_shader,
             vertex_buffer,
             index_buffer,
             position,
@@ -171,73 +137,6 @@ impl LightModel {
             light_obj_transform_bind_group,
             light_bind_group,
         }
-    }
-
-    fn create_light_render_pipeline(
-        device: &wgpu::Device,
-        camera_group_layout: &wgpu::BindGroupLayout,
-        object_transform_bind_group_layout: &wgpu::BindGroupLayout,
-        vertex_shader_module: &wgpu::ShaderModule,
-        fragment_shader_module: &wgpu::ShaderModule,
-        config: &SurfaceConfiguration,
-    ) -> wgpu::RenderPipeline {
-        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some("Light Pipeline Layout"),
-            bind_group_layouts: &[camera_group_layout, object_transform_bind_group_layout],
-            push_constant_ranges: &[],
-        });
-
-        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("Light Render Pipeline"),
-            layout: Some(&pipeline_layout),
-            vertex: wgpu::VertexState {
-                module: &vertex_shader_module,
-                entry_point: Some("main"),
-                compilation_options: wgpu::PipelineCompilationOptions::default(),
-                buffers: &[LightVertex::desc()],
-            },
-            primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::TriangleList,
-                strip_index_format: None,
-                front_face: wgpu::FrontFace::Ccw,
-                cull_mode: Some(wgpu::Face::Back),
-                polygon_mode: wgpu::PolygonMode::Fill,
-                unclipped_depth: false,
-                conservative: false,
-            },
-            depth_stencil: Some(wgpu::DepthStencilState {
-                format: wgpu::TextureFormat::Depth32Float,
-                depth_write_enabled: true,
-                depth_compare: wgpu::CompareFunction::Greater,
-                stencil: wgpu::StencilState::default(),
-                bias: wgpu::DepthBiasState::default(),
-            }),
-            fragment: Some(wgpu::FragmentState {
-                module: &fragment_shader_module,
-                entry_point: Some("main"),
-                compilation_options: wgpu::PipelineCompilationOptions::default(),
-                targets: &[Some(wgpu::ColorTargetState {
-                    format: config.format,
-                    blend: Some(wgpu::BlendState::REPLACE),
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
-            }),
-            multisample: wgpu::MultisampleState::default(),
-            multiview: None,
-            cache: None,
-        });
-
-        pipeline
-    }
-
-    pub fn render(&self, render_pass: &mut wgpu::RenderPass, camera_bind_group: &wgpu::BindGroup) {
-        render_pass.set_pipeline(&self.pipeline);
-        render_pass.set_bind_group(0, camera_bind_group, &[]);
-        render_pass.set_bind_group(1, &self.light_obj_transform_bind_group, &[]);
-
-        render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-        render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
-        render_pass.draw_indexed(0..self.indices.len() as u32, 0, 0..1);
     }
 }
 
@@ -252,5 +151,27 @@ impl Vertex for LightVertex {
             step_mode: wgpu::VertexStepMode::Vertex,
             attributes: &ATTRIBUTES,
         }
+    }
+}
+
+impl DebugModel for LightModel {
+    fn object_transform_bind_group(&self) -> &wgpu::BindGroup {
+        &self.light_obj_transform_bind_group
+    }
+
+    fn vertex_buffer(&self) -> &wgpu::Buffer {
+        &self.vertex_buffer
+    }
+
+    fn index_buffer(&self) -> &wgpu::Buffer {
+        &self.index_buffer
+    }
+
+    fn index_format(&self) -> wgpu::IndexFormat {
+        wgpu::IndexFormat::Uint16
+    }
+
+    fn num_indices(&self) -> u32 {
+        self.indices.len() as u32
     }
 }
