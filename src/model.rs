@@ -5,7 +5,7 @@ use crate::{
 };
 use glam::Vec3;
 use std::collections::HashMap;
-use wgpu::util::{BufferInitDescriptor, DeviceExt};
+use wgpu::util::DeviceExt;
 
 pub trait Vertex {
     fn desc() -> wgpu::VertexBufferLayout<'static>;

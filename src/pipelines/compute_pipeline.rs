@@ -1,5 +1,4 @@
 use crate::shader_compiler;
-use gltf::camera;
 use wgpu::{self, BindGroupLayoutDescriptor};
 
 pub struct ComputePipeline {

@@ -2,7 +2,7 @@ use glam::Vec4;
 use wgpu::{MultisampleState, PipelineLayoutDescriptor, TextureFormat};
 
 use crate::{
-    model::{ModelGPUDataInstanced, ModelVertex, Vertex},
+    model::{ModelGPUDataInstanced, Vertex},
     shader_compiler, Instance,
 };
 

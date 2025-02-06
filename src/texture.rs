@@ -1,6 +1,5 @@
 use anyhow::Result;
 use image::GenericImageView;
-use wgpu::{SurfaceConfiguration, TextureFormat, TextureUsages};
 
 use crate::renderer;
 

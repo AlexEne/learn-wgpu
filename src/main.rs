@@ -6,19 +6,14 @@ mod shader_compiler;
 mod texture;
 use std::time;
 
-use camera::{Camera, CameraGraphicsObject};
+use camera::Camera;
 use glam::{Quat, Vec3};
 mod light;
 use light::LightModel;
 use model::{Model, ModelGPUData, ModelGPUDataInstanced};
-use pipelines::{ComputePipeline, PBRMaterialInstance, PBRMaterialPipeline};
 use renderer::Renderer;
 use wgpu::{
-    util::{BufferInitDescriptor, DeviceExt, DrawIndexedIndirectArgs},
-    BindGroupDescriptor, BindGroupLayoutDescriptor, BindGroupLayoutEntry, BindingType, Color,
-    CommandEncoderDescriptor, Features, InstanceDescriptor, Limits, MemoryHints,
-    RenderPassColorAttachment, RenderPassDescriptor, ShaderStages, SurfaceError,
-    TextureViewDescriptor, VertexAttribute, VertexBufferLayout,
+    util::{DeviceExt, DrawIndexedIndirectArgs}, InstanceDescriptor, SurfaceError, VertexAttribute, VertexBufferLayout,
 };
 use winit::{
     error::EventLoopError,
