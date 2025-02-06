@@ -66,7 +66,7 @@ struct InstancedModel {
     compute_bind_group: wgpu::BindGroup,
 
     // Bind groups for the textures and pbr factors used during render pass
-    textures_binding_group: wgpu::BindGroup,
+    geometry_and_textures_bind_group: wgpu::BindGroup,
     pbr_factors_bind_group: wgpu::BindGroup,
     pbr_factors_buffer: wgpu::Buffer,
 }
@@ -276,31 +276,41 @@ impl<'a> State<'a> {
 
             let base_color = &textures[model.material.base_color_texture.0];
             let metalic_roughness = &textures[model.material.metalic_roughness_texture.0];
-            let textures_binding_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("Diffuse Bind Group"),
-                layout: &prb_material_pipeline.textures_bind_group_layout,
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: wgpu::BindingResource::TextureView(&base_color.view),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: wgpu::BindingResource::Sampler(&base_color.sampler),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 2,
-                        resource: wgpu::BindingResource::TextureView(&metalic_roughness.view),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 3,
-                        resource: wgpu::BindingResource::Sampler(&metalic_roughness.sampler),
-                    },
-                ],
-            });
 
             let (model_gpu_instanced, instances) =
                 create_instances(&device, model.create_gpu_data(&device), 0.7 * idx as f32);
+
+            let geometry_and_textures_bind_group =
+                device.create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: Some("Diffuse Bind Group"),
+                    layout: &prb_material_pipeline.geometry_and_textures_bind_group_layout,
+                    entries: &[
+                        wgpu::BindGroupEntry {
+                            binding: 0,
+                            resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+                                buffer: &model_gpu_instanced.model_gpu_data.vertex_buffer,
+                                offset: 0,
+                                size: None,
+                            }),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 1,
+                            resource: wgpu::BindingResource::TextureView(&base_color.view),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 2,
+                            resource: wgpu::BindingResource::Sampler(&base_color.sampler),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 3,
+                            resource: wgpu::BindingResource::TextureView(&metalic_roughness.view),
+                        },
+                        wgpu::BindGroupEntry {
+                            binding: 4,
+                            resource: wgpu::BindingResource::Sampler(&metalic_roughness.sampler),
+                        },
+                    ],
+                });
 
             indirect_args.push(DrawIndexedIndirectArgs {
                 index_count: model_gpu_instanced.model_gpu_data.index_buffer.num_indices,
@@ -353,7 +363,7 @@ impl<'a> State<'a> {
                     wgpu::BindGroupEntry {
                         binding: 3,
                         resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
-                            buffer: &model_gpu_instanced.model_gpu_data.bounding_box,
+                            buffer: &model_gpu_instanced.model_gpu_data.bounding_sphere,
                             offset: 0,
                             size: None,
                         }),
@@ -364,7 +374,7 @@ impl<'a> State<'a> {
             let instanced_model = InstancedModel {
                 instances,
                 model_gpu_instanced,
-                textures_binding_group,
+                geometry_and_textures_bind_group,
                 pbr_factors_bind_group,
                 pbr_factors_buffer,
                 indirect_draw_buffer,
@@ -501,7 +511,7 @@ impl<'a> State<'a> {
             self.prb_material_pipeline.draw_instanced(
                 &mut render_pass,
                 PBRMaterialInstance {
-                    textures_bind_group: &instanced_model.textures_binding_group,
+                    geometry_and_textures_bind_group: &instanced_model.geometry_and_textures_bind_group,
                     camera_bind_group: &self.camera_graphics_object.bind_group,
                     light_bind_group: &self.light_bind_group,
                     pbr_factors_bind_group: &instanced_model.pbr_factors_bind_group,

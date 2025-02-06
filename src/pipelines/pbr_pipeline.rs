@@ -47,7 +47,7 @@ impl MaterialData {
 
 pub struct PBRMaterialPipeline {
     pub pipeline: wgpu::RenderPipeline,
-    pub textures_bind_group_layout: wgpu::BindGroupLayout,
+    pub geometry_and_textures_bind_group_layout: wgpu::BindGroupLayout,
     pub pbr_factors_bind_group_layout: wgpu::BindGroupLayout,
 }
 
@@ -73,13 +73,24 @@ impl PBRMaterialPipeline {
                 }],
             });
 
-        let textures_bind_group_layout =
+        let geometry_and_textures_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 label: Some("PBR Textures bind group layout"),
                 entries: &[
-                    // Base Color Texture
+                    // Geometry
                     wgpu::BindGroupLayoutEntry {
                         binding: 0,
+                        visibility: wgpu::ShaderStages::VERTEX,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Storage { read_only: true },
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    },
+                    // Base Color Texture
+                    wgpu::BindGroupLayoutEntry {
+                        binding: 1,
                         visibility: wgpu::ShaderStages::FRAGMENT,
                         ty: wgpu::BindingType::Texture {
                             sample_type: wgpu::TextureSampleType::Float { filterable: true },
@@ -89,14 +100,14 @@ impl PBRMaterialPipeline {
                         count: None,
                     },
                     wgpu::BindGroupLayoutEntry {
-                        binding: 1,
+                        binding: 2,
                         visibility: wgpu::ShaderStages::FRAGMENT,
                         ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                         count: None,
                     },
                     // Metalic Roughness Texture
                     wgpu::BindGroupLayoutEntry {
-                        binding: 2,
+                        binding: 3,
                         visibility: wgpu::ShaderStages::FRAGMENT,
                         ty: wgpu::BindingType::Texture {
                             sample_type: wgpu::TextureSampleType::Float { filterable: true },
@@ -106,7 +117,7 @@ impl PBRMaterialPipeline {
                         count: None,
                     },
                     wgpu::BindGroupLayoutEntry {
-                        binding: 3,
+                        binding: 4,
                         visibility: wgpu::ShaderStages::FRAGMENT,
                         ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                         count: None,
@@ -131,7 +142,7 @@ impl PBRMaterialPipeline {
         let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
             label: Some("PBR Material Pipeline Layout"),
             bind_group_layouts: &[
-                &textures_bind_group_layout,
+                &geometry_and_textures_bind_group_layout,
                 camera_bind_group_layout,
                 light_bind_group_layout,
                 &pbr_factors_bind_group_layout,
@@ -146,7 +157,7 @@ impl PBRMaterialPipeline {
                 module: &vertex_shader,
                 entry_point: Some("main"),
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
-                buffers: &[ModelVertex::desc(), Instance::desc()],
+                buffers: &[Instance::desc()],
             },
             fragment: Some(wgpu::FragmentState {
                 module: &fragment_shader,
@@ -185,7 +196,7 @@ impl PBRMaterialPipeline {
 
         PBRMaterialPipeline {
             pipeline,
-            textures_bind_group_layout,
+            geometry_and_textures_bind_group_layout,
             pbr_factors_bind_group_layout,
         }
     }
@@ -198,15 +209,15 @@ impl PBRMaterialPipeline {
         indirect_draw_buffer: &wgpu::Buffer,
     ) {
         render_pass.set_pipeline(&self.pipeline);
-        render_pass.set_bind_group(0, material_instance.textures_bind_group, &[]);
+        // render_pass.set_bind_group(0, material_instance.geometry_bind_group, &[]);
+        render_pass.set_bind_group(0, material_instance.geometry_and_textures_bind_group, &[]);
         render_pass.set_bind_group(1, material_instance.camera_bind_group, &[]);
         render_pass.set_bind_group(2, material_instance.light_bind_group, &[]);
         render_pass.set_bind_group(3, material_instance.pbr_factors_bind_group, &[]);
 
         let model_gpu_data = &model_gpu_instanced.model_gpu_data;
         let index_buffer = &model_gpu_data.index_buffer;
-        render_pass.set_vertex_buffer(0, model_gpu_data.vertex_buffer.slice(..));
-        render_pass.set_vertex_buffer(1, model_gpu_instanced.instance_output_buffer.slice(..));
+        render_pass.set_vertex_buffer(0, model_gpu_instanced.instance_output_buffer.slice(..));
         render_pass.set_index_buffer(
             index_buffer.index_buffer.slice(..),
             index_buffer.index_buffer_format,
@@ -220,7 +231,7 @@ impl PBRMaterialPipeline {
 // This is because I might want to reuse bind groups across pipelines.
 // So as long as they respect the bind group layout, this works fine for now.
 pub struct PBRMaterialInstance<'a> {
-    pub textures_bind_group: &'a wgpu::BindGroup,
+    pub geometry_and_textures_bind_group: &'a wgpu::BindGroup,
     pub camera_bind_group: &'a wgpu::BindGroup,
     pub light_bind_group: &'a wgpu::BindGroup,
     pub pbr_factors_bind_group: &'a wgpu::BindGroup,

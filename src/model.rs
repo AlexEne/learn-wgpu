@@ -2,11 +2,9 @@ use crate::{
     pipelines::{MaterialData, TextureID},
     texture::Texture,
 };
+use glam::Vec3;
 use std::collections::HashMap;
-use wgpu::{
-    util::{BufferInitDescriptor, DeviceExt},
-    VertexAttribute, VertexBufferLayout,
-};
+use wgpu::util::{BufferInitDescriptor, DeviceExt};
 
 pub trait Vertex {
     fn desc() -> wgpu::VertexBufferLayout<'static>;
@@ -24,7 +22,7 @@ pub struct Model {
     pub vertices: Vec<ModelVertex>,
     pub indices: Vec<u32>, // A bit wasteful since they could be u16
     pub material: MaterialData,
-    pub aabb: AABB,
+    pub bounding_sphere: BoundingSphere,
 }
 
 impl Model {
@@ -42,7 +40,8 @@ impl Model {
         for mesh in document.meshes() {
             for (idx, primitive) in mesh.primitives().enumerate() {
                 let mut vertices = vec![];
-                let mut aabb = AABB::default();
+                let mut min_vtx_pos = Vec3::ZERO;
+                let mut max_vtx_pos = Vec3::ZERO;
 
                 let reader = primitive.reader(|buffer| Some(&buffers[buffer.index()]));
 
@@ -63,12 +62,12 @@ impl Model {
                 for ((position, tex_coord), normal) in positions.zip(tex_coords).zip(normals) {
                     // Adjust AABB
                     for i in 0..3 {
-                        if position[i] < aabb.min[i] {
-                            aabb.min[i] = position[i];
+                        if position[i] < min_vtx_pos[i] {
+                            min_vtx_pos[i] = position[i];
                         }
 
-                        if position[i] > aabb.max[i] {
-                            aabb.max[i] = position[i];
+                        if position[i] > max_vtx_pos[i] {
+                            max_vtx_pos[i] = position[i];
                         }
                     }
 
@@ -158,6 +157,9 @@ impl Model {
                 let roughness_factor = pbr_metalic_roughness.roughness_factor();
                 let base_color_factor = pbr_metalic_roughness.base_color_factor().into();
 
+                let sphere_center = (min_vtx_pos + max_vtx_pos) / 2.0;
+                let sphere_radius = (max_vtx_pos - min_vtx_pos).length() / 2.0;
+
                 models.push(Model {
                     vertices,
                     indices,
@@ -168,7 +170,10 @@ impl Model {
                         roughness_factor,
                         base_color_factor,
                     ),
-                    aabb,
+                    bounding_sphere: BoundingSphere {
+                        center: [sphere_center.x, sphere_center.y, sphere_center.z],
+                        radius: sphere_radius,
+                    },
                 });
             }
         }
@@ -180,7 +185,7 @@ impl Model {
         let vertex_buffer = device.create_buffer_init(&BufferInitDescriptor {
             label: Some("Vertex Buffer"),
             contents: bytemuck::cast_slice(&self.vertices),
-            usage: wgpu::BufferUsages::VERTEX,
+            usage: wgpu::BufferUsages::STORAGE,
         });
 
         let index_buffer = device.create_buffer_init(&BufferInitDescriptor {
@@ -189,17 +194,17 @@ impl Model {
             usage: wgpu::BufferUsages::INDEX,
         });
 
-        let aabb = device.create_buffer_init(&BufferInitDescriptor {
+        let bounding_shpere = device.create_buffer_init(&BufferInitDescriptor {
             label: Some("AABB Buffer"),
-            contents: bytemuck::cast_slice(&[self.aabb]),
+            contents: bytemuck::cast_slice(&[self.bounding_sphere]),
             usage: wgpu::BufferUsages::UNIFORM,
         });
 
-        (vertex_buffer, index_buffer, aabb)
+        (vertex_buffer, index_buffer, bounding_shpere)
     }
 
     pub fn create_gpu_data(&self, device: &wgpu::Device) -> ModelGPUData {
-        let (vertex_buffer, index_buffer, aabb) = self.create_buffers(device);
+        let (vertex_buffer, index_buffer, bounding_sphere) = self.create_buffers(device);
 
         ModelGPUData {
             vertex_buffer,
@@ -208,7 +213,7 @@ impl Model {
                 num_indices: self.indices.len() as _,
                 index_buffer_format: wgpu::IndexFormat::Uint32, // Wasteful for now
             },
-            bounding_box: aabb,
+            bounding_sphere,
         }
     }
 }
@@ -232,30 +237,17 @@ fn get_texture(
     }
 }
 
-impl Vertex for ModelVertex {
-    fn desc() -> wgpu::VertexBufferLayout<'static> {
-        const ATTRIBUTES: [VertexAttribute; 3] =
-            wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x3, 2 => Float32x2];
-
-        VertexBufferLayout {
-            array_stride: std::mem::size_of::<ModelVertex>() as wgpu::BufferAddress,
-            step_mode: wgpu::VertexStepMode::Vertex,
-            attributes: &ATTRIBUTES,
-        }
-    }
-}
-
 #[repr(C)]
 #[derive(Debug, Copy, Default, Clone, bytemuck::Pod, bytemuck::Zeroable)]
-pub struct AABB {
-    pub min: [f32; 4],
-    pub max: [f32; 4],
+pub struct BoundingSphere {
+    pub center: [f32; 3],
+    pub radius: f32,
 }
 
 pub struct ModelGPUData {
     pub vertex_buffer: wgpu::Buffer,
     pub index_buffer: WGPUIndexBufferData,
-    pub bounding_box: wgpu::Buffer,
+    pub bounding_sphere: wgpu::Buffer,
 }
 
 pub struct ModelGPUDataInstanced {

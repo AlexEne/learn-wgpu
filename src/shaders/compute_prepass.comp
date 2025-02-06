@@ -20,9 +20,9 @@ layout(set = 0, binding = 2) buffer InstanceOutputBuffer {
     mat4 instance_output_matrices[];
 };
 
-layout(set = 0, binding = 3) uniform ModelAABB {
-    vec4 aabb_min;
-    vec4 aabb_max;
+layout(set = 0, binding = 3) uniform BoundingSphere {
+    vec3 sphere_center;
+    float sphere_radius;
 };
 
 layout(set = 1, binding = 0) uniform Camera {
@@ -54,26 +54,23 @@ void main() {
     // Make sure all threads see the same reset value
     barrier();
 
-    // TODO cull instances here
     mat4 instance_mtx = instance_input_matrices[instance_index];
 
-    vec3 sphere_center = (aabb_max.xyz + aabb_min.xyz) / 2.0;
-    vec3 sphere_radius = aabb_max.xyz - sphere_center;
-
     vec4 sphere_pos_clip = (camera_mat * instance_mtx * vec4(sphere_center, 1.0));
-    vec3 sphere_radius_clip = abs((camera_mat * instance_mtx * vec4(sphere_radius, 0.0)).xyz);
+    vec3 sphere_radius_clip = abs((camera_mat * instance_mtx * vec4(sphere_radius, 0, 0, 0.0)).xyz);
 
-    if (sphere_pos_clip.w < 0.0) {
+    sphere_radius_clip /= sphere_pos_clip.w;
+
+    if (sphere_pos_clip.w < sphere_radius_clip.x) {
         // Check if we are behind the camera.
         // We use infinite Z so we won't cull gainst far plane.
         return;
     }
 
     sphere_pos_clip /= sphere_pos_clip.w;
-    sphere_radius_clip /= sphere_pos_clip.w;
 
     if (sphere_pos_clip.x + sphere_radius_clip.x < -1.0 || sphere_pos_clip.x - sphere_radius_clip.x > 1.0 ||
-            sphere_pos_clip.y + sphere_radius_clip.y < -1.0 || sphere_pos_clip.y - sphere_radius_clip.y > 1.0) {
+            sphere_pos_clip.y + sphere_radius_clip.x < -1.0 || sphere_pos_clip.y - sphere_radius_clip.x > 1.0) {
         return;
     }
 

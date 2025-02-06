@@ -8,11 +8,11 @@ layout(location = 1) in vec3 v_normal;
 layout(location = 2) in vec3 v_world_position;
 layout(location = 3) in vec3 v_camera_pos;
 
-layout(set = 0, binding = 0) uniform texture2D t_texture;
-layout(set = 0, binding = 1) uniform sampler s_diffuse;
+layout(set = 0, binding = 1) uniform texture2D t_texture;
+layout(set = 0, binding = 2) uniform sampler s_diffuse;
 
-layout(set = 0, binding = 2) uniform texture2D t_metalic_roughness;
-layout(set = 0, binding = 3) uniform sampler s_metalic_roughness;
+layout(set = 0, binding = 3) uniform texture2D t_metalic_roughness;
+layout(set = 0, binding = 4) uniform sampler s_metalic_roughness;
 
 layout(set = 2, binding = 0) uniform Light {
     vec3 position;
