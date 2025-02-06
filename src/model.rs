@@ -5,7 +5,6 @@ use crate::{
 };
 use glam::Vec3;
 use std::collections::HashMap;
-use wgpu::util::DeviceExt;
 
 pub trait Vertex {
     fn desc() -> wgpu::VertexBufferLayout<'static>;
@@ -27,11 +26,7 @@ pub struct Model {
 }
 
 impl Model {
-    pub fn from_gltf(
-        renderer: &renderer::Renderer,
-        path: &str,
-        textures: &mut Vec<Texture>,
-    ) -> Vec<Model> {
+    pub fn from_gltf(renderer: &mut renderer::Renderer, path: &str) -> Vec<Model> {
         let (document, buffers, _images) = gltf::import(path).unwrap();
 
         let mut texture_map = HashMap::new(); // Map gltf ids to texture ids
@@ -108,8 +103,8 @@ impl Model {
                         )
                         .unwrap();
 
-                        textures.push(texture);
-                        let id = textures.len() - 1;
+                        renderer.textures.push(texture);
+                        let id = renderer.textures.len() - 1;
                         texture_map.insert(base_texture_id, TextureID(id));
                         TextureID(id)
                     };
@@ -145,10 +140,7 @@ impl Model {
                     )
                     .unwrap();
 
-                    textures.push(texture);
-                    let id = textures.len() - 1;
-                    texture_map.insert(metalid_roughness_texture_id, TextureID(id));
-                    TextureID(id)
+                    renderer.add_texture(texture)
                 };
 
                 let metalic_factor = pbr_metalic_roughness.metallic_factor();

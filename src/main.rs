@@ -106,8 +106,6 @@ impl<'a> State<'a> {
     async fn new(window: &'a Window) -> State<'a> {
         let size = window.inner_size();
 
-        let mut textures = Vec::new();
-
         let instance = wgpu::Instance::new(&InstanceDescriptor {
             backends: wgpu::Backends::PRIMARY,
             ..Default::default()
@@ -124,10 +122,10 @@ impl<'a> State<'a> {
             .await
             .unwrap();
 
-        let renderer = Renderer::new(&adapter, &surface, (size.width, size.height));
+        let mut renderer = Renderer::new(&adapter, &surface, (size.width, size.height));
 
-        let mut models = Model::from_gltf(&renderer, "data/Corset.glb", &mut textures);
-        let avocado = Model::from_gltf(&renderer, "data/Avocado.glb", &mut textures);
+        let mut models = Model::from_gltf(&mut renderer, "data/Corset.glb");
+        let avocado = Model::from_gltf(&mut renderer, "data/Avocado.glb");
         models.extend(avocado.into_iter());
 
         let camera = Camera::new(
@@ -157,8 +155,8 @@ impl<'a> State<'a> {
                 &[&pbr_factors_buffer],
             );
 
-            let base_color = &textures[model.material.base_color_texture.0];
-            let metalic_roughness = &textures[model.material.metalic_roughness_texture.0];
+            let base_color = &renderer.textures[model.material.base_color_texture.0];
+            let metalic_roughness = &renderer.textures[model.material.metalic_roughness_texture.0];
 
             let (model_gpu_instanced, instances) = create_instances(
                 &renderer,

@@ -147,6 +147,11 @@ impl Renderer {
         self.config.height as _
     }
 
+    pub fn add_texture(&mut self, texture: Texture) -> pipelines::TextureID {
+        self.textures.push(texture);
+        pipelines::TextureID(self.textures.len() - 1)
+    }
+
     pub fn resize(&mut self, width: u32, height: u32) {
         let width = width.max(1);
         let height = height.max(1);
