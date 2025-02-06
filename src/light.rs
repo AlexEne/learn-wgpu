@@ -6,7 +6,9 @@ use wgpu::{
 
 use crate::{
     model::Vertex,
+    renderer::Renderer,
     shader_compiler::{self, compile_shaders},
+    LightUniform,
 };
 
 #[repr(C)]
@@ -18,6 +20,7 @@ pub struct LightVertex {
 pub struct LightModel {
     pub position: Vec3,
 
+    pub light_uniform: LightUniform,
     pub vertices: Vec<LightVertex>,
     pub indices: Vec<u16>,
     pub pipeline: wgpu::RenderPipeline,
@@ -27,16 +30,14 @@ pub struct LightModel {
     pub index_buffer: wgpu::Buffer,
     pub light_object_transform_buffer: wgpu::Buffer,
     pub light_obj_transform_bind_group: wgpu::BindGroup,
+
+    pub light_bind_group: wgpu::BindGroup,
 }
 
 impl LightModel {
-    pub fn new(
-        device: &wgpu::Device,
-        camera_group_layout: &wgpu::BindGroupLayout,
-        config: &SurfaceConfiguration,
-    ) -> LightModel {
+    pub fn new(renderer: &Renderer) -> LightModel {
         let (vertex_shader, fragment_shader) = compile_shaders(
-            device,
+            &renderer.device,
             shader_compiler::ShaderInput {
                 shader_code: include_str!("shaders/light.vert"),
                 entry_point: "main",
@@ -50,45 +51,44 @@ impl LightModel {
         );
 
         let object_transform_bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("Camera object model bind group layout"),
-                entries: &[wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::VERTEX,
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Uniform,
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                }],
-            });
+            renderer
+                .device
+                .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                    label: Some("Camera object model bind group layout"),
+                    entries: &[wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::VERTEX,
+                        ty: wgpu::BindingType::Buffer {
+                            ty: wgpu::BufferBindingType::Uniform,
+                            has_dynamic_offset: false,
+                            min_binding_size: None,
+                        },
+                        count: None,
+                    }],
+                });
 
         let position = Vec3::new(0.0, 0.3, 0.3);
         let data = glam::Mat4::from_translation(position).to_cols_array();
 
-        let light_object_transform_buffer = device.create_buffer_init(&BufferInitDescriptor {
-            label: Some("Light object transform buffer"),
-            contents: bytemuck::cast_slice(data.as_ref()),
-            usage: wgpu::BufferUsages::UNIFORM,
-        });
+        let light_object_transform_buffer = renderer.create_buffer_init(
+            "Light object transform buffer",
+            bytemuck::cast_slice(data.as_ref()),
+            wgpu::BufferUsages::UNIFORM,
+        );
 
-        let light_obj_transform_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &object_transform_bind_group_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: light_object_transform_buffer.as_entire_binding(),
-            }],
-            label: Some("Light object transform bind group"),
-        });
+        let light_obj_transform_bind_group = renderer.create_bind_group_for_buffers(
+            "Light object transform bind group",
+            &object_transform_bind_group_layout,
+            &[&light_object_transform_buffer],
+        );
 
         let pipeline = LightModel::create_light_render_pipeline(
-            &device,
-            &camera_group_layout,
+            &renderer.device,
+            &renderer.camera_graphics_object.bind_group_layout,
             &object_transform_bind_group_layout,
             &vertex_shader,
             &fragment_shader,
-            &config,
+            &renderer.config,
         );
 
         let vertices = vec![
@@ -126,21 +126,41 @@ impl LightModel {
             1, 2, 6, 6, 5, 1, // right face
         ];
 
-        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Light Vertex Buffer"),
-            contents: bytemuck::cast_slice(&vertices),
-            usage: wgpu::BufferUsages::VERTEX,
-        });
+        let vertex_buffer = renderer.create_buffer_init(
+            "Light Vertex Buffer",
+            bytemuck::cast_slice(&vertices),
+            wgpu::BufferUsages::VERTEX,
+        );
 
-        let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Light Index Buffer"),
-            contents: bytemuck::cast_slice(&indices),
-            usage: wgpu::BufferUsages::INDEX,
-        });
+        let index_buffer = renderer.create_buffer_init(
+            "Light Index Buffer",
+            bytemuck::cast_slice(&indices),
+            wgpu::BufferUsages::INDEX,
+        );
+
+        let light_uniform = LightUniform {
+            position: position.into(),
+            _padding: 0.0,
+            color: [1.0, 0.7, 0.7],
+            _padding2: 0.0,
+        };
+
+        let light_buffer = renderer.create_buffer_init(
+            "Light Buffer",
+            bytemuck::cast_slice(&[light_uniform]),
+            wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        );
+
+        let light_bind_group = renderer.create_bind_group_for_buffers(
+            "Light bind group",
+            &renderer.light_bind_group_layout,
+            &[&light_buffer],
+        );
 
         LightModel {
             vertices,
             indices,
+            light_uniform,
             pipeline,
             vertex_shader,
             fragment_shader,
@@ -149,6 +169,7 @@ impl LightModel {
             position,
             light_object_transform_buffer,
             light_obj_transform_bind_group,
+            light_bind_group,
         }
     }
 

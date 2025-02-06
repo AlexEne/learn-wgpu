@@ -207,7 +207,6 @@ impl Renderer {
         &mut self,
         surface: &wgpu::Surface,
         models_instanced: &[InstancedModel],
-        lights_bind_group: &wgpu::BindGroup,
         light_model: &LightModel,
     ) -> Result<(), wgpu::SurfaceError> {
         let output = surface.get_current_texture()?;
@@ -274,7 +273,7 @@ impl Renderer {
                     geometry_and_textures_bind_group: &instanced_model
                         .geometry_and_textures_bind_group,
                     camera_bind_group: &self.camera_graphics_object.bind_group,
-                    light_bind_group: lights_bind_group,
+                    light_bind_group: &light_model.light_bind_group,
                     pbr_factors_bind_group: &instanced_model.pbr_factors_bind_group,
                 },
                 &instanced_model.model_gpu_instanced,

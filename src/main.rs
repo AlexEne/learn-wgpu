@@ -13,7 +13,8 @@ use light::LightModel;
 use model::{Model, ModelGPUData, ModelGPUDataInstanced};
 use renderer::Renderer;
 use wgpu::{
-    util::{DeviceExt, DrawIndexedIndirectArgs}, InstanceDescriptor, SurfaceError, VertexAttribute, VertexBufferLayout,
+    util::{DeviceExt, DrawIndexedIndirectArgs},
+    InstanceDescriptor, SurfaceError, VertexAttribute, VertexBufferLayout,
 };
 use winit::{
     error::EventLoopError,
@@ -34,10 +35,6 @@ struct State<'a> {
     camera: Camera,
 
     models: Vec<Model>,
-
-    light_buffer: wgpu::Buffer,
-    light_uniform: LightUniform,
-    light_bind_group: wgpu::BindGroup,
 
     light_model: LightModel,
     models_instanced: Vec<InstancedModel>,
@@ -142,37 +139,10 @@ impl<'a> State<'a> {
         );
 
         // TODO make device private
-        let light_model = LightModel::new(
-            &renderer.device,
-            &renderer.camera_graphics_object.bind_group_layout,
-            &renderer.config,
-        );
-        let light = LightUniform {
-            position: light_model.position.into(),
-            _padding: 0.0,
-            color: [1.0, 0.7, 0.7],
-            _padding2: 0.0,
-        };
-
-        let light_buffer = renderer.create_buffer_init(
-            "Light Buffer",
-            bytemuck::cast_slice(&[light]),
-            wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-        );
-
-        let light_bind_group = renderer.create_bind_group_for_buffers(
-            "Light bind group",
-            &renderer.light_bind_group_layout,
-            &[&light_buffer],
-        );
+        let light_model = LightModel::new(&renderer);
 
         let mut models_instanced = Vec::new();
         let mut indirect_args = Vec::new();
-        let instance_output_buffer = renderer.create_buffer(
-            "Instance Output Buffer",
-            1024 * 1024 * 16,
-            wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::STORAGE,
-        );
 
         for (idx, model) in models.iter().enumerate() {
             let pbr_factors_buffer = renderer.create_buffer_init(
@@ -285,9 +255,6 @@ impl<'a> State<'a> {
             window,
 
             camera,
-            light_buffer,
-            light_uniform: light,
-            light_bind_group,
 
             models,
             light_model,
@@ -340,7 +307,6 @@ impl<'a> State<'a> {
         self.renderer.render(
             &self.surface,
             &self.models_instanced,
-            &self.light_bind_group,
             &self.light_model,
         )
     }
