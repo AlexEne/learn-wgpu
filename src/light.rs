@@ -1,6 +1,6 @@
 use glam::Vec3;
 use wgpu::{
-    util::{BufferInitDescriptor, DeviceExt},
+    util::DeviceExt,
     SurfaceConfiguration,
 };
 
